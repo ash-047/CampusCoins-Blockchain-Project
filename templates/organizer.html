@@ -1,0 +1,148 @@
+{% extends "dashboard.html" %}
+
+{% block title %}CampusCoins - Event Organizer Dashboard{% endblock %}
+
+{% block role_class %}organizer{% endblock %}
+{% block role_name %}Event Organizer{% endblock %}
+
+{% block dashboard_title %}Event Organizer Dashboard{% endblock %}
+
+{% block dashboard_content %}
+    <div class="card">
+        <h3>Reward Students</h3>
+        <div class="form-group">
+            <label for="rewardTo">Student:</label>
+            <select id="rewardTo" class="form-control"></select>
+        </div>
+        <div class="form-group">
+            <label for="rewardAmount">Amount:</label>
+            <input type="number" id="rewardAmount" class="form-control" min="1">
+        </div>
+        <div class="form-group">
+            <label for="rewardReason">Activity/Achievement:</label>
+            <input type="text" id="rewardReason" class="form-control" placeholder="Reason for rewarding">
+        </div>
+        <button id="rewardBtn" class="btn btn-success">Reward Student</button>
+    </div>
+    
+    <div class="card">
+        <h3>Transfer Tokens</h3>
+        <div class="form-group">
+            <label for="transferTo">Recipient:</label>
+            <select id="transferTo" class="form-control"></select>
+        </div>
+        <div class="form-group">
+            <label for="transferAmount">Amount:</label>
+            <input type="number" id="transferAmount" class="form-control" min="1">
+        </div>
+        <button id="transferBtn" class="btn btn-primary">Transfer Tokens</button>
+    </div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/transaction-debug.js') }}"></script>
+<script>
+document.addEventListener('DOMContentLoaded', async function() {
+    if (await checkWalletConnection()) {
+        updateBalance();
+        // Load student accounts for the dropdown
+        loadAccounts('rewardTo', 'student');
+        // Load all accounts for transfer dropdown
+        loadAccounts('transferTo');
+        
+        // Reward student
+        document.getElementById('rewardBtn').addEventListener('click', async function() {
+            const student = document.getElementById('rewardTo').value;
+            const amount = document.getElementById('rewardAmount').value;
+            const reason = document.getElementById('rewardReason').value;
+            
+            if (!student || !amount || amount <= 0 || !reason) {
+                showTransactionStatus('Please fill all fields correctly', true);
+                return;
+            }
+            
+            try {
+                showTransactionStatus('Initiating transaction... please confirm in MetaMask');
+                console.log(`Rewarding ${amount} CC to ${student} for: ${reason}`);
+                
+                // First check if we have enough balance
+                const balance = await campusCoinContract.methods.balanceOf(userAccount).call();
+                console.log(`Current balance: ${balance} CC`);
+                if (parseInt(balance) < parseInt(amount)) {
+                    showTransactionStatus(`Insufficient balance. You have ${balance} CC but trying to send ${amount} CC`, true);
+                    return;
+                }
+                
+                // Use enhanced transaction handling
+                const result = await sendEnhancedTransaction(
+                    campusCoinContract, 
+                    'rewardStudent',
+                    [student, amount, reason],
+                    userAccount
+                );
+                
+                if (result.success) {
+                    showTransactionStatus(`Successfully rewarded ${amount} CC to ${student} for: ${reason}`);
+                    setTimeout(() => {
+                        updateBalance();
+                    }, 1000);
+                } else {
+                    showTransactionStatus(`Transaction failed: ${result.message}`, true);
+                }
+            } catch (error) {
+                console.error("Reward error:", error);
+                const errorMsg = await decodeTransactionError(error);
+                showTransactionStatus(`Transaction failed: ${errorMsg}`, true);
+            }
+        });
+        
+        // Transfer tokens
+        document.getElementById('transferBtn').addEventListener('click', async function() {
+            const to = document.getElementById('transferTo').value;
+            const amount = document.getElementById('transferAmount').value;
+            
+            if (!to || !amount || amount <= 0) {
+                showTransactionStatus('Please fill all fields correctly', true);
+                return;
+            }
+            
+            try {
+                showTransactionStatus('Initiating transaction... please confirm in MetaMask');
+                console.log(`Transferring ${amount} CC to ${to}`);
+                
+                // First check if we have enough balance
+                const balance = await campusCoinContract.methods.balanceOf(userAccount).call();
+                console.log(`Current balance: ${balance} CC`);
+                if (parseInt(balance) < parseInt(amount)) {
+                    showTransactionStatus(`Insufficient balance. You have ${balance} CC but trying to send ${amount} CC`, true);
+                    return;
+                }
+                
+                // Use enhanced transaction handling
+                const result = await sendEnhancedTransaction(
+                    campusCoinContract,
+                    'transfer',
+                    [to, amount],
+                    userAccount
+                );
+                
+                if (result.success) {
+                    showTransactionStatus(`Successfully transferred ${amount} CC to ${to}`);
+                    setTimeout(() => {
+                        updateBalance();
+                    }, 1000);
+                } else {
+                    showTransactionStatus(`Transaction failed: ${result.message}`, true);
+                }
+            } catch (error) {
+                console.error("Transfer error:", error);
+                const errorMsg = await decodeTransactionError(error);
+                showTransactionStatus(`Transaction failed: ${errorMsg}`, true);
+            }
+        });
+    } else {
+        window.location.href = '/';
+    }
+});
+</script>
+{% endblock %}

@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CampusCoins - Setup Instructions</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+</head>
+<body>
+    <header>
+        <h1>CampusCoins Setup Guide</h1>
+    </header>
+    
+    <div class="container">
+        <div class="card">
+            <h2>Initial Setup Instructions</h2>
+            
+            <div class="setup-step">
+                <h3>1. Deploy the Contract</h3>
+                <pre class="code-block">truffle migrate --reset</pre>
+                <p>This will deploy the CampusCoin contract and automatically set up the roles.</p>
+            </div>
+            
+            <div class="setup-step">
+                <h3>2. Verify Roles</h3>
+                <pre class="code-block">truffle exec check_roles.js</pre>
+                <p>This will check if the roles are properly set up in the blockchain.</p>
+            </div>
+            
+            <div class="setup-step">
+                <h3>3. Manual Role Setup (if needed)</h3>
+                <pre class="code-block">truffle exec setup_roles.js</pre>
+                <p>If roles were not set up properly during migration, this script will set them manually.</p>
+            </div>
+            
+            <div class="setup-step">
+                <h3>4. Update Contract Address</h3>
+                <pre class="code-block">python deploy.py</pre>
+                <p>This will update the contract address in app.js with the newly deployed address.</p>
+            </div>
+            
+            <div class="setup-step">
+                <h3>5. Start the Application</h3>
+                <pre class="code-block">python app.py</pre>
+                <p>This will start the Flask web application.</p>
+            </div>
+            
+            <div class="setup-step">
+                <h3>6. Account Roles</h3>
+                <table class="role-table">
+                    <thead>
+                        <tr>
+                            <th>Account Index</th>
+                            <th>Role</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>0</td>
+                            <td>Admin</td>
+                        </tr>
+                        <tr>
+                            <td>1-2</td>
+                            <td>Organizers</td>
+                        </tr>
+                        <tr>
+                            <td>3-4</td>
+                            <td>Canteen Staff</td>
+                        </tr>
+                        <tr>
+                            <td>5-9</td>
+                            <td>Students</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            
+            <a href="/" class="btn btn-primary">Back to Home</a>
+        </div>
+    </div>
+    
+    <style>
+        .setup-step {
+            margin-bottom: 20px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid #eee;
+        }
+        
+        .code-block {
+            background-color: #f5f5f5;
+            padding: 10px;
+            border-radius: 4px;
+            font-family: monospace;
+        }
+        
+        .role-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 15px 0;
+        }
+        
+        .role-table th, .role-table td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        
+        .role-table th {
+            background-color: #f2f2f2;
+        }
+    </style>
+</body>
+</html>

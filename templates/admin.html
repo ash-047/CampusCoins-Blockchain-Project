@@ -1,0 +1,174 @@
+{% extends "dashboard.html" %}
+
+{% block title %}CampusCoins - Admin Dashboard{% endblock %}
+
+{% block role_class %}admin{% endblock %}
+{% block role_name %}Admin{% endblock %}
+
+{% block dashboard_title %}Admin Dashboard{% endblock %}
+
+{% block dashboard_content %}
+    <div class="card">
+        <h3>Mint Tokens</h3>
+        <div class="form-group">
+            <label for="mintTo">Recipient:</label>
+            <select id="mintTo" class="form-control"></select>
+        </div>
+        <div class="form-group">
+            <label for="mintAmount">Amount:</label>
+            <input type="number" id="mintAmount" class="form-control" min="1">
+        </div>
+        <button id="mintBtn" class="btn btn-success">Mint Tokens</button>
+    </div>
+    
+    <div class="card">
+        <h3>Slash Tokens (Penalties)</h3>
+        <div class="form-group">
+            <label for="slashFrom">Student:</label>
+            <select id="slashFrom" class="form-control"></select>
+        </div>
+        <div class="form-group">
+            <label for="slashAmount">Amount:</label>
+            <input type="number" id="slashAmount" class="form-control" min="1">
+        </div>
+        <div class="form-group">
+            <label for="slashReason">Reason:</label>
+            <input type="text" id="slashReason" class="form-control" placeholder="Reason for slashing tokens">
+        </div>
+        <button id="slashBtn" class="btn btn-danger">Slash Tokens</button>
+    </div>
+    
+    <div class="card">
+        <h3>Manage Roles</h3>
+        <div class="form-group">
+            <label for="roleAddress">Address:</label>
+            <select id="roleAddress" class="form-control"></select>
+        </div>
+        <div class="form-group">
+            <label for="roleType">Role:</label>
+            <select id="roleType" class="form-control">
+                <option value="organizer">Organizer</option>
+                <option value="canteen">Canteen Staff</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="roleStatus">Status:</label>
+            <select id="roleStatus" class="form-control">
+                <option value="true">Enable</option>
+                <option value="false">Disable</option>
+            </select>
+        </div>
+        <button id="setRoleBtn" class="btn btn-primary">Set Role</button>
+    </div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/transaction-debug.js') }}"></script>
+<script>
+document.addEventListener('DOMContentLoaded', async function() {
+    if (await checkWalletConnection()) {
+        updateBalance();
+        // Load all accounts for the dropdowns
+        loadAccounts('mintTo');
+        loadAccounts('slashFrom', 'student');
+        loadAccounts('roleAddress');
+        
+        // Mint tokens
+        document.getElementById('mintBtn').addEventListener('click', async function() {
+            const to = document.getElementById('mintTo').value;
+            const amount = document.getElementById('mintAmount').value;
+            
+            if (!to || !amount || amount <= 0) {
+                showTransactionStatus('Please fill all fields correctly', true);
+                return;
+            }
+            
+            try {
+                showTransactionStatus('Initiating minting transaction... please confirm in MetaMask');
+                console.log(`Minting ${amount} CC to ${to}`);
+                
+                // Use enhanced transaction handling
+                const result = await sendEnhancedTransaction(
+                    campusCoinContract,
+                    'mint',
+                    [to, amount],
+                    userAccount
+                );
+                
+                if (result.success) {
+                    showTransactionStatus(`Successfully minted ${amount} CC to ${to}`);
+                    setTimeout(() => {
+                        updateBalance();
+                    }, 1000);
+                } else {
+                    showTransactionStatus(`Transaction failed: ${result.message}`, true);
+                }
+            } catch (error) {
+                console.error("Mint error:", error);
+                const errorMsg = await decodeTransactionError(error);
+                showTransactionStatus(`Transaction failed: ${errorMsg}`, true);
+            }
+        });
+        
+        // Set role
+        document.getElementById('setRoleBtn').addEventListener('click', async function() {
+            const address = document.getElementById('roleAddress').value;
+            const role = document.getElementById('roleType').value;
+            const status = document.getElementById('roleStatus').value === 'true';
+            
+            if (!address) {
+                showTransactionStatus('Please select an address', true);
+                return;
+            }
+            
+            try {
+                showTransactionStatus('Initiating role change transaction... please confirm in MetaMask');
+                console.log(`Setting ${role} role to ${status ? 'enabled' : 'disabled'} for ${address}`);
+                
+                let result;
+                if (role === 'organizer') {
+                    result = await sendEnhancedTransaction(
+                        campusCoinContract,
+                        'setOrganizer',
+                        [address, status],
+                        userAccount
+                    );
+                } else if (role === 'canteen') {
+                    result = await sendEnhancedTransaction(
+                        campusCoinContract,
+                        'setCanteenStaff',
+                        [address, status],
+                        userAccount
+                    );
+                }
+                
+                if (result.success) {
+                    showTransactionStatus(`Successfully ${status ? 'enabled' : 'disabled'} ${role} role for ${address}`);
+                } else {
+                    showTransactionStatus(`Transaction failed: ${result.message}`, true);
+                }
+            } catch (error) {
+                console.error("Set role error:", error);
+                const errorMsg = await decodeTransactionError(error);
+                showTransactionStatus(`Transaction failed: ${errorMsg}`, true);
+            }
+        });
+        
+        // Initial setup after page load
+        async function setupInitialRoles() {
+            // Check admin balance first
+            const adminBalance = await getBalance(userAccount);
+            console.log(`Admin balance: ${adminBalance} CC`);
+            
+            if (adminBalance === '0') {
+                showTransactionStatus('Welcome, Admin! To get started, mint some tokens to yourself or other users.');
+            }
+        }
+        
+        setupInitialRoles();
+    } else {
+        window.location.href = '/';
+    }
+});
+</script>
+{% endblock %}

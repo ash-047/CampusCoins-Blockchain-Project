@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CampusCoins - Transaction Debug</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+    <style>
+        .debug-log {
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            padding: 10px;
+            border-radius: 5px;
+            font-family: monospace;
+            max-height: 300px;
+            overflow-y: auto;
+            margin-top: 15px;
+        }
+        
+        .debug-section {
+            margin-bottom: 20px;
+        }
+        
+        .debug-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        
+        .debug-table th, .debug-table td {
+            border: 1px solid #dee2e6;
+            padding: 8px;
+            text-align: left;
+        }
+        
+        .debug-table th {
+            background-color: #f2f2f2;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>CampusCoins Transaction Debugger</h1>
+    </header>
+    
+    <div class="container">
+        <div class="card">
+            <h2>Transaction Testing Tool</h2>
+            <p>Connected Wallet: <span id="walletAddress">Not connected</span></p>
+            <button class="btn btn-primary" id="connectWallet">Connect Wallet</button>
+            
+            <div class="debug-section">
+                <h3>Test Transaction</h3>
+                <div class="form-group">
+                    <label for="contractMethod">Contract Method:</label>
+                    <select id="contractMethod" class="form-control">
+                        <option value="rewardStudent">rewardStudent</option>
+                        <option value="transfer">transfer</option>
+                        <option value="mint">mint</option>
+                        <option value="setOrganizer">setOrganizer</option>
+                        <option value="setCanteenStaff">setCanteenStaff</option>
+                    </select>
+                </div>
+                
+                <div id="methodParams"></div>
+                
+                <button class="btn btn-success" id="testTransaction">Test Transaction</button>
+                <button class="btn btn-primary" id="estimateGas">Estimate Gas</button>
+            </div>
+            
+            <div id="transactionStatus" class="transaction-status"></div>
+            
+            <div class="debug-section">
+                <h3>Debug Log</h3>
+                <div id="debugLog" class="debug-log"></div>
+            </div>
+        </div>
+    </div>
+    
+    <script src="https://cdn.jsdelivr.net/npm/web3@1.5.2/dist/web3.min.js"></script>
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/transaction-debug.js') }}"></script>
+    <script>
+        let web3;
+        let campusCoinContract;
+        let userAccount;
+        
+        // Method parameter configuration
+        const methodConfig = {
+            rewardStudent: [
+                {name: 'Student Address', type: 'address', id: 'student'},
+                {name: 'Amount', type: 'uint256', id: 'amount'},
+                {name: 'Reason', type: 'string', id: 'reason'}
+            ],
+            transfer: [
+                {name: 'Recipient', type: 'address', id: 'to'},
+                {name: 'Amount', type: 'uint256', id: 'amount'}
+            ],
+            mint: [
+                {name: 'Recipient', type: 'address', id: 'to'},
+                {name: 'Amount', type: 'uint256', id: 'amount'}
+            ],
+            setOrganizer: [
+                {name: 'Address', type: 'address', id: 'organizer'},
+                {name: 'Status', type: 'bool', id: 'status'}
+            ],
+            setCanteenStaff: [
+                {name: 'Address', type: 'address', id: 'staff'},
+                {name: 'Status', type: 'bool', id: 'status'}
+            ]
+        };
+        
+        function updateMethodParams() {
+            const methodName = document.getElementById('contractMethod').value;
+            const paramsDiv = document.getElementById('methodParams');
+            paramsDiv.innerHTML = '';
+            
+            if (methodConfig[methodName]) {
+                methodConfig[methodName].forEach(param => {
+                    const formGroup = document.createElement('div');
+                    formGroup.className = 'form-group';
+                    
+                    const label = document.createElement('label');
+                    label.setAttribute('for', param.id);
+                    label.textContent = `${param.name} (${param.type}):`;
+                    
+                    let input;
+                    if (param.type === 'bool') {
+                        input = document.createElement('select');
+                        const optionTrue = document.createElement('option');
+                        optionTrue.value = 'true';
+                        optionTrue.textContent = 'True';
+                        
+                        const optionFalse = document.createElement('option');
+                        optionFalse.value = 'false';
+                        optionFalse.textContent = 'False';
+                        
+                        input.appendChild(optionTrue);
+                        input.appendChild(optionFalse);
+                    } else if (param.type === 'address') {
+                        input = document.createElement('select');
+                        // We'll populate this with accounts later
+                        const defaultOption = document.createElement('option');
+                        defaultOption.value = '';
+                        defaultOption.textContent = 'Select an address';
+                        input.appendChild(defaultOption);
+                    } else {
+                        input = document.createElement('input');
+                        input.type = param.type === 'uint256' ? 'number' : 'text';
+                        if (param.type === 'uint256') {
+                            input.min = '0';
+                        }
+                    }
+                    
+                    input.className = 'form-control';
+                    input.id = param.id;
+                    
+                    formGroup.appendChild(label);
+                    formGroup.appendChild(input);
+                    paramsDiv.appendChild(formGroup);
+                });
+                
+                // Load addresses for address fields
+                loadAddressDropdowns();
+            }
+        }
+        
+        async function loadAddressDropdowns() {
+            // For each address parameter, populate with account options
+            const addressInputs = document.querySelectorAll('select[id]');
+            addressInputs.forEach(select => {
+                const paramConfig = findParamConfig(select.id);
+                if (paramConfig && paramConfig.type === 'address') {
+                    loadAccountsForDebug(select.id);
+                }
+            });
+        }
+        
+        function findParamConfig(id) {
+            const methodName = document.getElementById('contractMethod').value;
+            if (methodConfig[methodName]) {
+                return methodConfig[methodName].find(param => param.id === id);
+            }
+            return null;
+        }
+        
+        async function loadAccountsForDebug(selectId) {
+            const selectElement = document.getElementById(selectId);
+            if (!selectElement) return;
+            
+            // Clear existing options except the first one
+            while (selectElement.options.length > 1) {
+                selectElement.remove(1);
+            }
+            
+            // Add account options
+            for (const [address, role] of Object.entries(ROLE_MAPPINGS)) {
+                const option = document.createElement('option');
+                option.text = `${address} (${role})`;
+                option.value = address;
+                selectElement.add(option);
+            }
+        }
+        
+        function getParameterValues() {
+            const methodName = document.getElementById('contractMethod').value;
+            const values = [];
+            
+            if (methodConfig[methodName]) {
+                methodConfig[methodName].forEach(param => {
+                    const element = document.getElementById(param.id);
+                    let value = element.value;
+                    
+                    // Convert types appropriately
+                    if (param.type === 'uint256') {
+                        value = parseInt(value);
+                    } else if (param.type === 'bool') {
+                        value = value === 'true';
+                    }
+                    
+                    values.push(value);
+                });
+            }
+            
+            return values;
+        }
+        
+        function logToDebug(message, isError = false) {
+            const debugLog = document.getElementById('debugLog');
+            const logEntry = document.createElement('div');
+            logEntry.style.color = isError ? '#721c24' : '#155724';
+            logEntry.style.marginBottom = '5px';
+            
+            const timestamp = new Date().toLocaleTimeString();
+            logEntry.textContent = `[${timestamp}] ${message}`;
+            
+            debugLog.appendChild(logEntry);
+            debugLog.scrollTop = debugLog.scrollHeight;
+        }
+        
+        async function testTransaction() {
+            if (!campusCoinContract) {
+                logToDebug('Contract not initialized. Please connect your wallet first.', true);
+                return;
+            }
+            
+            const methodName = document.getElementById('contractMethod').value;
+            const params = getParameterValues();
+            
+            logToDebug(`Testing ${methodName} with params: ${JSON.stringify(params)}`);
+            
+            try {
+                const result = await sendEnhancedTransaction(
+                    campusCoinContract,
+                    methodName,
+                    params,
+                    userAccount
+                );
+                
+                if (result.success) {
+                    logToDebug(`✅ Transaction successful: ${result.message}`);
+                    showTransactionStatus(`Transaction successful: ${result.message}`);
+                } else {
+                    logToDebug(`❌ Transaction failed: ${result.message}`, true);
+                    showTransactionStatus(`Transaction failed: ${result.message}`, true);
+                }
+            } catch (error) {
+                const errorMsg = await decodeTransactionError(error);
+                logToDebug(`❌ Error: ${errorMsg}`, true);
+                showTransactionStatus(`Error: ${errorMsg}`, true);
+            }
+        }
+        
+        async function estimateGasOnly() {
+            if (!campusCoinContract) {
+                logToDebug('Contract not initialized. Please connect your wallet first.', true);
+                return;
+            }
+            
+            const methodName = document.getElementById('contractMethod').value;
+            const params = getParameterValues();
+            
+            logToDebug(`Estimating gas for ${methodName} with params: ${JSON.stringify(params)}`);
+            
+            try {
+                await estimateGasAndReport(campusCoinContract, methodName, params, userAccount);
+                showTransactionStatus('Gas estimation completed. Check debug log for details.');
+            } catch (error) {
+                const errorMsg = await decodeTransactionError(error);
+                logToDebug(`❌ Gas estimation failed: ${errorMsg}`, true);
+                showTransactionStatus(`Gas estimation failed: ${errorMsg}`, true);
+            }
+        }
+        
+        async function connectWalletForDebug() {
+            if (window.ethereum) {
+                try {
+                    web3 = new Web3(window.ethereum);
+                    const accounts = await ethereum.request({ method: 'eth_requestAccounts' });
+                    userAccount = accounts[0];
+                    
+                    document.getElementById('walletAddress').innerText = userAccount;
+                    document.getElementById('connectWallet').style.display = 'none';
+                    
+                    logToDebug(`Connected wallet: ${userAccount}`);
+                    
+                    // Get contract ABI and instantiate contract
+                    const response = await fetch('/contract-abi');
+                    const abi = await response.json();
+                    campusCoinContract = new web3.eth.Contract(abi, CONTRACT_ADDRESS);
+                    
+                    logToDebug(`Contract initialized at ${CONTRACT_ADDRESS}`);
+                    
+                    // Update method params after wallet connection
+                    updateMethodParams();
+                    
+                } catch (error) {
+                    console.error("Connection error:", error);
+                    logToDebug(`Connection error: ${error.message}`, true);
+                }
+            } else {
+                logToDebug('MetaMask not detected. Please install MetaMask.', true);
+            }
+        }
+        
+        document.addEventListener('DOMContentLoaded', function() {
+            document.getElementById('connectWallet').addEventListener('click', connectWalletForDebug);
+            document.getElementById('contractMethod').addEventListener('change', updateMethodParams);
+            document.getElementById('testTransaction').addEventListener('click', testTransaction);
+            document.getElementById('estimateGas').addEventListener('click', estimateGasOnly);
+            
+            updateMethodParams();
+        });
+    </script>
+</body>
+</html>

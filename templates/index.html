@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CampusCoins - Blockchain-Based Campus Reward System</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+</head>
+<body>
+    <header>
+        <h1>CampusCoins</h1>
+    </header>
+    
+    <div class="container">
+        <div class="card">
+            <h2>Welcome to CampusCoins</h2>
+            <p>A blockchain-based campus reward system where students earn tokens for participating in campus activities.</p>
+            
+            <div class="wallet-info" id="walletInfo">
+                <p>Connected Wallet: <span id="walletAddress"></span></p>
+            </div>
+            
+            <button class="btn btn-primary" id="connectWallet">Connect Wallet</button>
+        </div>
+    </div>
+    
+    <script src="https://cdn.jsdelivr.net/npm/web3@1.5.2/dist/web3.min.js"></script>
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>

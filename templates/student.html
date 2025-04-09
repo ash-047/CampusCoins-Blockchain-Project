@@ -1,0 +1,67 @@
+{% extends "dashboard.html" %}
+
+{% block title %}CampusCoins - Student Dashboard{% endblock %}
+
+{% block role_class %}student{% endblock %}
+{% block role_name %}Student{% endblock %}
+
+{% block dashboard_title %}Student Dashboard{% endblock %}
+
+{% block dashboard_content %}
+    <div class="card">
+        <h3>Transfer Tokens</h3>
+        <div class="form-group">
+            <label for="transferTo">Recipient:</label>
+            <select id="transferTo" class="form-control"></select>
+        </div>
+        <div class="form-group">
+            <label for="transferAmount">Amount:</label>
+            <input type="number" id="transferAmount" class="form-control" min="1">
+        </div>
+        <button id="transferBtn" class="btn btn-primary">Transfer Tokens</button>
+    </div>
+    
+    <div class="card">
+        <h3>Recent Activity</h3>
+        <div id="activityLog">
+            <p>Your activities will appear here...</p>
+        </div>
+    </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', async function() {
+    if (await checkWalletConnection()) {
+        updateBalance();
+        // Load all accounts for transfer dropdown
+        loadAccounts('transferTo');
+        
+        // Transfer tokens
+        document.getElementById('transferBtn').addEventListener('click', async function() {
+            const to = document.getElementById('transferTo').value;
+            const amount = document.getElementById('transferAmount').value;
+            
+            if (!to || !amount || amount <= 0) {
+                showTransactionStatus('Please fill all fields correctly', true);
+                return;
+            }
+            
+            try {
+                await campusCoinContract.methods.transfer(to, amount).send({ from: userAccount });
+                showTransactionStatus(`Successfully transferred ${amount} CC to ${to}`);
+                updateBalance();
+            } catch (error) {
+                console.error("Transfer error:", error);
+                showTransactionStatus('Transaction failed: ' + (error.message || 'Error'), true);
+            }
+        });
+        
+        // We would ideally load transaction history here
+        // However, for simplicity, we'll just display a placeholder
+    } else {
+        window.location.href = '/';
+    }
+});
+</script>
+{% endblock %}

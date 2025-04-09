@@ -1,0 +1,89 @@
+{% extends "dashboard.html" %}
+
+{% block title %}CampusCoins - Canteen Staff Dashboard{% endblock %}
+
+{% block role_class %}canteen{% endblock %}
+{% block role_name %}Canteen Staff{% endblock %}
+
+{% block dashboard_title %}Canteen Staff Dashboard{% endblock %}
+
+{% block dashboard_content %}
+    <div class="card">
+        <h3>Redeem Student Tokens</h3>
+        <div class="form-group">
+            <label for="redeemFrom">Student:</label>
+            <select id="redeemFrom" class="form-control"></select>
+        </div>
+        <div class="form-group">
+            <label for="redeemAmount">Amount:</label>
+            <input type="number" id="redeemAmount" class="form-control" min="1">
+        </div>
+        <button id="redeemBtn" class="btn btn-primary">Redeem Tokens</button>
+    </div>
+    
+    <div class="card">
+        <h3>Check Student Balance</h3>
+        <div class="form-group">
+            <label for="checkStudent">Student:</label>
+            <select id="checkStudent" class="form-control"></select>
+        </div>
+        <button id="checkBalanceBtn" class="btn btn-success">Check Balance</button>
+        <div id="studentBalanceDisplay" style="margin-top: 10px; display: none;">
+            <p>Student Balance: <span id="studentBalance" class="balance-display">0</span> CC</p>
+        </div>
+    </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', async function() {
+    if (await checkWalletConnection()) {
+        updateBalance();
+        // Load student accounts for the dropdowns
+        loadAccounts('redeemFrom', 'student');
+        loadAccounts('checkStudent', 'student');
+        
+        // Redeem tokens
+        document.getElementById('redeemBtn').addEventListener('click', async function() {
+            const student = document.getElementById('redeemFrom').value;
+            const amount = document.getElementById('redeemAmount').value;
+            
+            if (!student || !amount || amount <= 0) {
+                showTransactionStatus('Please fill all fields correctly', true);
+                return;
+            }
+            
+            try {
+                await campusCoinContract.methods.redeemTokens(student, amount).send({ from: userAccount });
+                showTransactionStatus(`Successfully redeemed ${amount} CC from ${student}`);
+                updateBalance();
+            } catch (error) {
+                console.error("Redeem error:", error);
+                showTransactionStatus('Transaction failed: ' + (error.message || 'Error'), true);
+            }
+        });
+        
+        // Check student balance
+        document.getElementById('checkBalanceBtn').addEventListener('click', async function() {
+            const student = document.getElementById('checkStudent').value;
+            
+            if (!student) {
+                showTransactionStatus('Please select a student', true);
+                return;
+            }
+            
+            try {
+                const balance = await getBalance(student);
+                document.getElementById('studentBalance').innerText = balance;
+                document.getElementById('studentBalanceDisplay').style.display = 'block';
+            } catch (error) {
+                console.error("Check balance error:", error);
+                showTransactionStatus('Failed to check balance: ' + (error.message || 'Error'), true);
+            }
+        });
+    } else {
+        window.location.href = '/';
+    }
+});
+</script>
+{% endblock %}
