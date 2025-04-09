@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Dashboard - CampusCoins</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/css/bootstrap.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/web3@1.8.0/dist/web3.min.js"></script>
+</head>
+<body>
+    <div class="container my-4">
+        <nav class="navbar navbar-expand-lg navbar-light bg-light mb-4">
+            <div class="container-fluid">
+                <a class="navbar-brand" href="#">CampusCoins Admin</a>
+                <div class="d-flex">
+                    <span class="navbar-text me-3">
+                        <small>Wallet: </small>
+                        <span id="walletAddress"></span>
+                    </span>
+                    <button id="logoutBtn" class="btn btn-outline-secondary btn-sm">Logout</button>
+                </div>
+            </div>
+        </nav>
+
+        <div class="row">
+            <div class="col-md-6">
+                <div class="card mb-4">
+                    <div class="card-header">Mint Tokens</div>
+                    <div class="card-body">
+                        <form id="mintForm">
+                            <div class="mb-3">
+                                <label for="mintAddress" class="form-label">Recipient Address</label>
+                                <select class="form-select" id="mintAddress" required>
+                                    <option value="">Select a user...</option>
+                                    <!-- Will be populated from API -->
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label for="mintAmount" class="form-label">Amount</label>
+                                <input type="number" class="form-control" id="mintAmount" min="1" required>
+                            </div>
+                            <button type="submit" class="btn btn-primary">Mint Tokens</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-6">
+                <div class="card mb-4">
+                    <div class="card-header">Slash Tokens</div>
+                    <div class="card-body">
+                        <form id="slashForm">
+                            <div class="mb-3">
+                                <label for="slashAddress" class="form-label">Student Address</label>
+                                <select class="form-select" id="slashAddress" required>
+                                    <option value="">Select a student...</option>
+                                    <!-- Will be populated from API -->
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label for="slashAmount" class="form-label">Amount</label>
+                                <input type="number" class="form-control" id="slashAmount" min="1" required>
+                            </div>
+                            <div class="mb-3">
+                                <label for="slashReason" class="form-label">Reason</label>
+                                <input type="text" class="form-control" id="slashReason" required>
+                            </div>
+                            <button type="submit" class="btn btn-danger">Slash Tokens</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col-md-12">
+                <div class="card">
+                    <div class="card-header">Set Role</div>
+                    <div class="card-body">
+                        <form id="roleForm">
+                            <div class="mb-3">
+                                <label for="roleAddress" class="form-label">User Address</label>
+                                <select class="form-select" id="roleAddress" required>
+                                    <option value="">Select a user...</option>
+                                    <!-- Will be populated from API -->
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label for="roleType" class="form-label">Role</label>
+                                <select class="form-control" id="roleType" required>
+                                    <option value="organizer">Event Organizer</option>
+                                    <option value="canteen">Canteen Staff</option>
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label for="roleStatus" class="form-label">Status</label>
+                                <select class="form-control" id="roleStatus" required>
+                                    <option value="true">Enable</option>
+                                    <option value="false">Disable</option>
+                                </select>
+                            </div>
+                            <button type="submit" class="btn btn-success">Update Role</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="alert mt-4" id="statusMessage" style="display: none;"></div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', async () => {
+            // Check if user is logged in
+            const walletAddress = sessionStorage.getItem('walletAddress');
+            if (!walletAddress) {
+                window.location.href = '/';
+                return;
+            }
+
+            document.getElementById('walletAddress').textContent = `${walletAddress.slice(0,6)}...${walletAddress.slice(-4)}`;
+            document.getElementById('logoutBtn').addEventListener('click', () => {
+                sessionStorage.removeItem('walletAddress');
+                window.location.href = '/';
+            });
+
+            // Initialize Web3
+            if (typeof window.ethereum === 'undefined') {
+                showStatus('Please install MetaMask to use this application.', 'danger');
+                return;
+            }
+
+            try {
+                // Request account access
+                await ethereum.request({ method: 'eth_requestAccounts' });
+                const web3 = new Web3(window.ethereum);
+
+                // Get contract address from backend
+                const contractResponse = await fetch('/contract_address');
+                const contractData = await contractResponse.json();
+                const contractAddress = contractData.address;
+
+                // Get all users for dropdowns
+                const studentsResponse = await fetch('/get_students');
+                const studentsData = await studentsResponse.json();
+                
+                // Populate mint dropdown with all users
+                const mintSelect = document.getElementById('mintAddress');
+                studentsData.students.forEach(address => {
+                    const option = document.createElement('option');
+                    option.value = address;
+                    option.textContent = `${address.slice(0,6)}...${address.slice(-4)}`;
+                    mintSelect.appendChild(option);
+                });
+                
+                // Populate slash dropdown with students only
+                const slashSelect = document.getElementById('slashAddress');
+                studentsData.students.forEach(address => {
+                    const option = document.createElement('option');
+                    option.value = address;
+                    option.textContent = `${address.slice(0,6)}...${address.slice(-4)}`;
+                    slashSelect.appendChild(option);
+                });
+                
+                // Populate role dropdown with all addresses
+                const roleSelect = document.getElementById('roleAddress');
+                studentsData.students.forEach(address => {
+                    const option = document.createElement('option');
+                    option.value = address;
+                    option.textContent = `${address.slice(0,6)}...${address.slice(-4)}`;
+                    roleSelect.appendChild(option);
+                });
+
+                // Get contract ABI from build artifacts (this is a simplified example)
+                const abi = [
+                    // Simplified ABI with just the methods we need
+                    {"inputs":[],"stateMutability":"nonpayable","type":"constructor"},
+                    {"inputs":[{"internalType":"address","name":"_to","type":"address"},{"internalType":"uint256","name":"_amount","type":"uint256"}],"name":"mint","outputs":[],"stateMutability":"nonpayable","type":"function"},
+                    {"inputs":[{"internalType":"address","name":"_from","type":"address"},{"internalType":"uint256","name":"_amount","type":"uint256"},{"internalType":"string","name":"_reason","type":"string"}],"name":"slashTokens","outputs":[],"stateMutability":"nonpayable","type":"function"},
+                    {"inputs":[{"internalType":"address","name":"_organizer","type":"address"},{"internalType":"bool","name":"_status","type":"bool"}],"name":"setEventOrganizer","outputs":[],"stateMutability":"nonpayable","type":"function"},
+                    {"inputs":[{"internalType":"address","name":"_staff","type":"address"},{"internalType":"bool","name":"_status","type":"bool"}],"name":"setCanteenStaff","outputs":[],"stateMutability":"nonpayable","type":"function"}
+                ];
+
+                const campusCoinContract = new web3.eth.Contract(abi, contractAddress);
+
+                // Handle mint form submission
+                document.getElementById('mintForm').addEventListener('submit', async (e) => {
+                    e.preventDefault();
+                    const to = document.getElementById('mintAddress').value;
+                    const amount = web3.utils.toWei(document.getElementById('mintAmount').value, 'ether');
+                    
+                    try {
+                        showStatus('Processing mint transaction...', 'info');
+                        await campusCoinContract.methods.mint(to, amount).send({ 
+                            from: walletAddress,
+                            gas: 200000 // Add gas limit
+                        });
+                        showStatus('Tokens minted successfully!', 'success');
+                    } catch (error) {
+                        showStatus(`Error: ${error.message}`, 'danger');
+                        console.error("Mint error:", error);
+                    }
+                });
+
+                // Handle slash form submission
+                document.getElementById('slashForm').addEventListener('submit', async (e) => {
+                    e.preventDefault();
+                    const from = document.getElementById('slashAddress').value;
+                    const amount = web3.utils.toWei(document.getElementById('slashAmount').value, 'ether');
+                    const reason = document.getElementById('slashReason').value;
+                    
+                    try {
+                        showStatus('Processing slash transaction...', 'info');
+                        await campusCoinContract.methods.slashTokens(from, amount, reason).send({ 
+                            from: walletAddress,
+                            gas: 200000 // Add gas limit
+                        });
+                        showStatus('Tokens slashed successfully!', 'success');
+                    } catch (error) {
+                        showStatus(`Error: ${error.message}`, 'danger');
+                        console.error("Slash error:", error);
+                    }
+                });
+
+                // Handle role form submission
+                document.getElementById('roleForm').addEventListener('submit', async (e) => {
+                    e.preventDefault();
+                    const address = document.getElementById('roleAddress').value;
+                    const role = document.getElementById('roleType').value;
+                    const status = document.getElementById('roleStatus').value === 'true';
+                    
+                    try {
+                        showStatus('Processing role update...', 'info');
+                        if (role === 'organizer') {
+                            await campusCoinContract.methods.setEventOrganizer(address, status).send({ 
+                                from: walletAddress,
+                                gas: 200000 // Add gas limit
+                            });
+                        } else {
+                            await campusCoinContract.methods.setCanteenStaff(address, status).send({ 
+                                from: walletAddress,
+                                gas: 200000 // Add gas limit
+                            });
+                        }
+                        showStatus('Role updated successfully!', 'success');
+                    } catch (error) {
+                        showStatus(`Error: ${error.message}`, 'danger');
+                        console.error("Role update error:", error);
+                    }
+                });
+
+            } catch (error) {
+                showStatus(`Error: ${error.message}`, 'danger');
+                console.error("Initialization error:", error);
+            }
+        });
+
+        function showStatus(message, type) {
+            const statusElement = document.getElementById('statusMessage');
+            statusElement.textContent = message;
+            statusElement.className = `alert alert-${type}`;
+            statusElement.style.display = 'block';
+            
+            // Auto-hide after 5 seconds
+            setTimeout(() => {
+                statusElement.style.display = 'none';
+            }, 5000);
+        }
+    </script>
+</body>
+</html>

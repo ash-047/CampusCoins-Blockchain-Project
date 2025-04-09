@@ -1,0 +1,13 @@
+{
+  "name": "blockchain-project",
+  "version": "1.0.0",
+  "description": "CampusCoins - Blockchain-Based Campus Reward System",
+  "main": "setup_contract.js",
+  "scripts": {
+    "setup": "node setup_contract.js"
+  },
+  "dependencies": {
+    "web3": "^1.8.0",
+    "axios": "^0.27.2"
+  }
+}
