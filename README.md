@@ -72,17 +72,18 @@ The system has the following roles:
 1. **Admin** (Account #0):nts
    - Can mint new tokensteen staff roles
    - Can slash tokens from students
-   - Can assign organizer and canteen staff roles2. **Event Organizer** (Accounts #1-2):
-dents with tokens
-2. **Event Organizer** (Accounts #1-2):   - Can view student balances
+   - Can assign organizer and canteen staff roles
+   - 
+2. **Event Organizer** (Accounts #1-2):
+   - Can view student balances
    - Can reward students with tokens
-   - Can view student balancestaff** (Accounts #3-4):
+   - Can view student balancestaff
 
-3. **Canteen Staff** (Accounts #3-4):
+4. **Canteen Staff** (Accounts #3-4):
    - Can redeem tokens from students
    - Can check student balances
 
-4. **Students** (Accounts #5-9):ansfer tokens to others
+5. **Students** (Accounts #5-9):
    - Can view their token balance
    - Can transfer tokens to others
 
