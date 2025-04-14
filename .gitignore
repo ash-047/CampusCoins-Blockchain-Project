@@ -1,0 +1,6 @@
+.env 
+build/contracts/CampusCoin.json
+build/
+build/contracts
+Blockchain_ProjectInstructions.pdf
+bc_project.txt
