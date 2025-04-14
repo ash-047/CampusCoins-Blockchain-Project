@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CampusCoins - Unauthorized Access</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+    <style>
+        .unauthorized-message {
+            text-align: center;
+            margin: 50px auto;
+            color: #721c24;
+        }
+        
+        .unauthorized-icon {
+            font-size: 64px;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>CampusCoins</h1>
+    </header>
+    
+    <div class="container">
+        <div class="card">
+            <div class="unauthorized-message">
+                <div class="unauthorized-icon">🚫</div>
+                <h2>Unauthorized Access</h2>
+                <p>You don't have permission to access this page. Please return to your dashboard.</p>
+                <p>If you believe this is an error, please contact the administrator.</p>
+                <br>
+                <a href="/" class="btn btn-primary">Back to Home</a>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
