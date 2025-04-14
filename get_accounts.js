@@ -4,18 +4,13 @@ module.exports = async function(callback) {
   try {
     const campusCoin = await CampusCoin.deployed();
     const accounts = await web3.eth.getAccounts();
-    
     const accountData = {
       accounts: []
     };
-
-    // Process all accounts
     for (let i = 0; i < accounts.length; i++) {
       const address = accounts[i];
       let role = 'student';
       let displayName = '';
-      
-      // Determine role and display name based on index
       if (i === 0) {
         role = 'admin';
         displayName = `Admin`;
@@ -32,14 +27,11 @@ module.exports = async function(callback) {
         role = 'canteen';
         displayName = `Canteen Staff 2`;
       } else {
-        // For students, calculate their SRN
         const studentNumber = i - 4;
         const paddedNumber = studentNumber.toString().padStart(3, '0');
         displayName = `PES2UG22CS${paddedNumber}`;
         role = 'student';
       }
-      
-      // Verify role on blockchain
       if (i === 0) {
         const adminAddress = await campusCoin.admin.call();
         if (address.toLowerCase() !== adminAddress.toLowerCase()) {
@@ -56,7 +48,6 @@ module.exports = async function(callback) {
           console.log(`Warning: Account ${i} expected to be canteen staff but is not set as canteen in contract`);
         }
       }
-      
       accountData.accounts.push({
         address: address,
         index: i,
@@ -64,10 +55,7 @@ module.exports = async function(callback) {
         displayName: displayName
       });
     }
-    
-    // Print JSON data for Flask to capture
     console.log(JSON.stringify(accountData));
-    
     callback();
   } catch (error) {
     console.error("Error getting accounts:", error);
