@@ -22,6 +22,7 @@ cd CampusCoins-Blockchain-Project
 
 ```
 npm install truffle -g  # If truffle is not installed globally
+npm install ganache
 pip install flask
 pip install web3
 ```
