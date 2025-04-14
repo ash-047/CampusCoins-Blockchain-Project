@@ -4,12 +4,18 @@ import os
 import re
 from web3 import Web3
 from functools import wraps
+from dotenv import load_dotenv
+
+load_dotenv()  # Load environment variables from .env file
 
 app = Flask(__name__)
 app.secret_key = os.urandom(24)  # Secret key for sessions
 
 # Connect to Ganache
 w3 = Web3(Web3.HTTPProvider('http://127.0.0.1:7545'))
+
+# Get contract address from environment variable
+CONTRACT_ADDRESS = os.getenv('CONTRACT_ADDRESS')
 
 # Role checking decorator
 def role_required(roles):
@@ -45,18 +51,19 @@ def get_accounts():
             abi = contract_json["abi"]
         
         # Get contract address from deploy.py output
-        contract_address = None
-        try:
-            with open(os.path.join("static", "js", "app.js"), "r") as f:
-                for line in f:
-                    if "CONTRACT_ADDRESS" in line:
-                        match = re.search(r"'0x[a-fA-F0-9]{40}'", line)
-                        if match:
-                            contract_address = match.group().strip("'")
-                            break
-        except Exception as e:
-            print(f"Error finding contract address: {e}")
-            contract_address = None
+        contract_address = CONTRACT_ADDRESS
+        if not contract_address:
+            try:
+                with open(os.path.join("static", "js", "app.js"), "r") as f:
+                    for line in f:
+                        if "CONTRACT_ADDRESS" in line:
+                            match = re.search(r"'0x[a-fA-F0-9]{40}'", line)
+                            if match:
+                                contract_address = match.group().strip("'")
+                                break
+            except Exception as e:
+                print(f"Error finding contract address: {e}")
+                contract_address = None
             
         if not contract_address:
             # Fallback to the network section of the contract JSON
@@ -131,35 +138,31 @@ def set_role():
 
 @app.route("/")
 def index():
-    return render_template("index.html")
+    return render_template("index.html", contract_address=CONTRACT_ADDRESS)
 
 @app.route("/dashboard")
 def dashboard():
-    return render_template("dashboard.html")
+    return render_template("dashboard.html", contract_address=CONTRACT_ADDRESS)
 
 @app.route("/admin")
 @role_required(['admin'])
 def admin():
-    return render_template("admin.html")
+    return render_template("admin.html", contract_address=CONTRACT_ADDRESS)
 
 @app.route("/organizer")
 @role_required(['admin', 'organizer'])
 def organizer():
-    return render_template("organizer.html")
+    return render_template("organizer.html", contract_address=CONTRACT_ADDRESS)
 
 @app.route("/canteen")
 @role_required(['admin', 'canteen'])
 def canteen():
-    return render_template("canteen.html")
+    return render_template("canteen.html", contract_address=CONTRACT_ADDRESS)
 
 @app.route("/student")
 @role_required(['admin', 'organizer', 'canteen', 'student'])
 def student():
-    return render_template("student.html")
-
-@app.route("/debug")
-def debug():
-    return render_template("debug.html")
+    return render_template("student.html", contract_address=CONTRACT_ADDRESS)
 
 @app.route("/setup")
 def setup():

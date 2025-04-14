@@ -1,0 +1,194 @@
+Ok I need you to do this. This is basically a university project so, make sure don't make the codebase too big. Make sure the code does what it is supposed to do while still have minimal number of lines. Remember the "Code working">"Minimality" but both are desired. Here is your task follow this: CampusCoins – Blockchain-Based Campus Reward System
+Overview
+Build a web-based token reward system called CampusCoins, where students earn tokens for participating in campus activities and lose tokens for rule violations. These tokens can be redeemed at facilities like the campus canteen or bookstore.
+
+The system uses a local blockchain network (Ganache), a custom ERC-20-like token (CampusCoin), and MetaMask for wallet-based authentication. A Flask backend serves the web interface, and role-based access is enforced using wallet addresses.
+
+Technical Components
+1. Smart Contract (CampusCoin)
+Deploy a custom token contract to a local Ganache blockchain.
+
+Core functions:
+
+Mint tokens (admin only)
+
+Reward tokens to students (event organizers)
+
+Redeem tokens (canteen staff)
+
+Slash tokens for violations (admin)
+
+View balances
+
+2. MetaMask Integration
+Users connect their wallet through MetaMask.
+
+The application checks the connected wallet address to determine the user's role.
+
+Transactions (mint, transfer, slash) are signed through MetaMask and sent to the Ganache blockchain.
+
+3. Role Assignment
+Wallet addresses from Ganache accounts are manually assigned roles:
+
+One account is the admin
+
+One or more are event organizers
+
+One or more are canteen staff
+
+All others default to student
+
+Role mappings are hardcoded in the frontend (or optionally in the backend)
+
+4. Flask Web Application
+Serves role-based interfaces
+
+Handles routing (e.g., /admin, /student, etc.)
+
+Hosts HTML, JavaScript, and Web3.js files
+
+5. Web Frontend (HTML + JavaScript + Web3.js)
+Provides dashboards for each role
+
+Uses Web3.js to interact with the smart contract through MetaMask
+
+Displays feedback based on transaction results
+
+Application Flow
+User lands on the home page
+
+Clicks “Connect Wallet”
+
+MetaMask opens and connects
+
+System checks the connected wallet address
+
+Matches it against a predefined list of wallet-role mappings
+
+Determines the role: admin, student, event organizer, or canteen staff
+
+User is redirected to their role-based dashboard
+
+Admin: Mint or slash tokens
+
+Organizer: Reward tokens to students
+
+Canteen: Redeem tokens from students
+
+Student: View balance and redeem tokens
+
+User performs actions from the dashboard
+
+Each action triggers a smart contract function via MetaMask
+
+Feedback is shown
+
+Success/failure of the transaction
+
+Updated balance or transaction history
+
+Summary
+Custom token (CampusCoin) on a local Ganache blockchain
+
+Role-based web application with MetaMask wallet integration
+
+Role assignment based on wallet address
+
+Transactions handled through smart contract functions
+
+Frontend served via Flask
+
+ADDITIONAL INFO: USE GANACHE, and these are the accounts in ganache:
+ADDRESS
+0x10787572daaE58789b74b131c48EF4e93E00dA06
+BALANCE
+99.99 ETH
+TX COUNT
+4
+INDEX
+0
+ADDRESS
+0x4977451329D69861613A220837b2f1C61F31C531
+BALANCE
+100.00 ETH
+TX COUNT
+0
+INDEX
+1
+ADDRESS
+0xFCEe892f01345D3364a86c79Ac2C1CD7c53da0Cd
+BALANCE
+100.00 ETH
+TX COUNT
+3
+INDEX
+2
+ADDRESS
+0x9c86495CF5d83Af41a376E1865dac9F3E127a688
+BALANCE
+100.00 ETH
+TX COUNT
+0
+INDEX
+3
+ADDRESS
+0xCa5D12aE19785C30a4Dc90aD26B96DC00e2053eB
+BALANCE
+100.00 ETH
+TX COUNT
+0
+INDEX
+4
+ADDRESS
+0x839B74A47a63e4cDdfB02a52EcD98c4aB23183fe
+BALANCE
+100.00 ETH
+TX COUNT
+0
+INDEX
+5
+ADDRESS
+0xC9ecEf5042F913c65AA0Fcd81E0D6202f90DE2f7
+BALANCE
+100.00 ETH
+TX COUNT
+0
+INDEX
+6
+ADDRESS
+0xFe9b60BE72C7666901303732d37aF49B09871c35
+BALANCE
+100.00 ETH
+TX COUNT
+0
+INDEX
+7
+ADDRESS
+0x1D9CE4f79d7ccFD9cf08Eb747c610C6c045d1B94
+BALANCE
+100.00 ETH
+TX COUNT
+0
+INDEX
+8
+ADDRESS
+0xb0059F146C41178960684b1F74d8e6c3e1E204b8
+BALANCE
+100.00 ETH
+TX COUNT
+0
+INDEX
+9
+
+AND MAKE SURE YOU FOLLOW THIS SCHEME: (0=admin, 1-2=organizers, 3-4=canteen, 5-9=students)
+Also let the admin have high balance and then he can also give other organizers/students coins..(add dropdown list for this)..and give others balances that you wish..MAKE SURE THE TRANSACTIONS AND INTEGRATION BETWEEN METAMASK, GANACHE AND THIS PROJECT WORK PROPERLY
+
+==================================
+
+Can you fix the implementation for this/ or maybe modify the code so that it must be working in the following way..Also make sure the recipient drop down list shows the list of account to be given to (srn for students and ORganizer1, Organizer 2..etc. for other..).: Ok currently, I see that we need to know the address to send to a particular person..But is it possible to map the addresses to SRNs of the students. A SRN is of the form PES2UG22CSXXX where XXX varies from 001 to 999..But I see that there are only 10 accounts in Ganache, out of which some are reserved for admin, and some for organizer and canteen..So instead of hardcoding the role for every single address..Is it possible to  keep it this way:
+1. Imagine a ganache workspace has 1000 accounts.., I want the first accound to be admin, the next 2 to be organizers and the next 2 to be the canteen..and everyone else is a student(and the SRNs vary from PES2UG22CS001 TO PES2UG22CS999). There may or may not be 1000 accounts. Also, make sure the drop down shows PES2UG22CSXXX ( <role> <address>)..
+2. Next, all the transactions work now and I tested them. So I don't want you to mess anything up. So after code modifications make sure there are no errors and everything should work as expected.
+
+
+Make sure you dont mess up anything else
+There may be 100-1000 accounts in the Ganache workspace and I dont want to hardcode roles to them one by one..I want it to happen automatically  and also the drop down should have Admin, Organizer 1, Organizer 2, Canteen staff 1, canteen staff 2, PES2UG22CS001, ALL THE way up to how many eveer accounts are remaining in the ganache workspace..Also, these options in the drop down will be linked to the accounts present in ganache workspace..
