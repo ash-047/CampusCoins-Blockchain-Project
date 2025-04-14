@@ -1,0 +1,183 @@
+{% extends "dashboard.html" %}
+
+{% block title %}CampusCoins - Admin Dashboard{% endblock %}
+
+{% block role_class %}admin{% endblock %}
+{% block role_name %}Admin{% endblock %}
+
+{% block dashboard_title %}Admin Dashboard{% endblock %}
+
+{% block dashboard_content %}
+    <div class="card">
+        <h3>Mint Tokens</h3>
+        <div class="form-group">
+            <label for="mintTo">Recipient:</label>
+            <select id="mintTo" class="form-control"></select>
+        </div>
+        <div class="form-group">
+            <label for="mintAmount">Amount:</label>
+            <input type="number" id="mintAmount" class="form-control" min="1">
+        </div>
+        <button id="mintBtn" class="btn btn-success">Mint Tokens</button>
+    </div>
+    <div class="card">
+        <h3>Slash Tokens (Penalties)</h3>
+        <div class="form-group">
+            <label for="slashFrom">Student:</label>
+            <select id="slashFrom" class="form-control"></select>
+        </div>
+        <div class="form-group">
+            <label for="slashAmount">Amount:</label>
+            <input type="number" id="slashAmount" class="form-control" min="1">
+        </div>
+        <div class="form-group">
+            <label for="slashReason">Reason:</label>
+            <input type="text" id="slashReason" class="form-control" placeholder="Reason for slashing tokens">
+        </div>
+        <button id="slashBtn" class="btn btn-danger">Slash Tokens</button>
+    </div>
+    <div class="card">
+        <h3>Recent Activities</h3>
+        <div id="activityLog">
+            <p id="noActivities" style="display: none;">No recent activities</p>
+        </div>
+    </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', async function() {
+    if (await checkWalletConnection()) {
+        updateBalance();
+        loadAccounts('mintTo');
+        loadAccounts('slashFrom', 'student');
+        loadActivityHistory();
+        document.getElementById('mintBtn').addEventListener('click', async function() {
+            const to = document.getElementById('mintTo').value;
+            const amount = document.getElementById('mintAmount').value;
+            if (!to || !amount || amount <= 0) {
+                showTransactionStatus('Please fill all fields correctly', true);
+                return;
+            }
+            try {
+                showTransactionStatus('Initiating minting transaction... please confirm in MetaMask');
+                console.log(`Minting ${amount} CC to ${to}`);
+                const result = await sendEnhancedTransaction(
+                    campusCoinContract,
+                    'mint',
+                    [to, amount],
+                    userAccount
+                );
+                
+                if (result.success) {
+                    showTransactionStatus(`Successfully minted ${amount} CC to ${to}`);
+                    addActivity('Mint', `Minted ${amount} CC to ${to}`, result.txHash);
+                    setTimeout(() => {
+                        updateBalance();
+                    }, 1000);
+                } else {
+                    showTransactionStatus(`Transaction failed: ${result.message}`, true);
+                }
+            } catch (error) {
+                console.error("Mint error:", error);
+                const errorMsg = await decodeTransactionError(error);
+                showTransactionStatus(`Transaction failed: ${errorMsg}`, true);
+            }
+        });
+    
+        document.getElementById('slashBtn').addEventListener('click', async function() {
+            const student = document.getElementById('slashFrom').value;
+            const amount = document.getElementById('slashAmount').value;
+            const reason = document.getElementById('slashReason').value;
+            if (!student || !amount || amount <= 0 || !reason) {
+                showTransactionStatus('Please fill all fields correctly', true);
+                return;
+            }
+            try {
+                showTransactionStatus('Initiating slashing transaction... please confirm in MetaMask');
+                console.log(`Slashing ${amount} CC from ${student} for reason: ${reason}`);
+                const result = await sendEnhancedTransaction(
+                    campusCoinContract,
+                    'slashTokens',
+                    [student, amount, reason],
+                    userAccount
+                );
+                
+                if (result.success) {
+                    showTransactionStatus(`Successfully slashed ${amount} CC from ${student} for: ${reason}`);
+                    addActivity('Slash', `Slashed ${amount} CC from ${student} - Reason: ${reason}`, result.txHash);
+                } else {
+                    showTransactionStatus(`Transaction failed: ${result.message}`, true);
+                }
+            } catch (error) {
+                console.error("Slash error:", error);
+                const errorMsg = await decodeTransactionError(error);
+                showTransactionStatus(`Transaction failed: ${errorMsg}`, true);
+            }
+        });
+
+        function addActivity(type, description, txHash) {
+            const activities = JSON.parse(localStorage.getItem(`activities_${userAccount}`) || '[]');
+            activities.unshift({
+                type: type,
+                description: description,
+                txHash: txHash,
+                timestamp: new Date().toISOString(),
+                role: 'Admin'
+            });
+            const limitedActivities = activities.slice(0, 10);
+            localStorage.setItem(`activities_${userAccount}`, JSON.stringify(limitedActivities));
+            loadActivityHistory();
+        }
+
+        function loadActivityHistory() {
+            const activityLog = document.getElementById('activityLog');
+            const noActivities = document.getElementById('noActivities');
+            const activities = JSON.parse(localStorage.getItem(`activities_${userAccount}`) || '[]');
+            activityLog.innerHTML = '';
+            if (activities.length === 0) {
+                activityLog.appendChild(noActivities);
+                return;
+            }
+            const table = document.createElement('table');
+            table.className = 'activity-table';
+            const thead = document.createElement('thead');
+            thead.innerHTML = `
+                <tr>
+                    <th>Date</th>
+                    <th>Role</th>
+                    <th>Type</th>
+                    <th>Description</th>
+                </tr>
+            `;
+            table.appendChild(thead);
+            const tbody = document.createElement('tbody');
+            activities.forEach(activity => {
+                const row = document.createElement('tr');
+                const date = new Date(activity.timestamp);
+                const formattedDate = `${date.toLocaleDateString()} ${date.toLocaleTimeString()}`;
+                row.innerHTML = `
+                    <td>${formattedDate}</td>
+                    <td>${activity.role || 'Admin'}</td>
+                    <td>${activity.type}</td>
+                    <td>${activity.description}</td>
+                `;
+                tbody.appendChild(row);
+            });
+            table.appendChild(tbody);
+            activityLog.appendChild(table);
+        }
+        async function setupInitialRoles() {
+            const adminBalance = await getBalance(userAccount);
+            console.log(`Admin balance: ${adminBalance} CC`);
+            if (adminBalance === '0') {
+                showTransactionStatus('Welcome, Admin! To get started, mint some tokens to yourself or other users.');
+            }
+        }
+        setupInitialRoles();
+    } else {
+        window.location.href = '/';
+    }
+});
+</script>
+{% endblock %}
