@@ -1,0 +1,212 @@
+{% extends "dashboard.html" %}
+
+{% block title %}CampusCoins - Event Organizer Dashboard{% endblock %}
+
+{% block role_class %}organizer{% endblock %}
+{% block role_name %}Event Organizer{% endblock %}
+
+{% block dashboard_title %}Event Organizer Dashboard{% endblock %}
+
+{% block dashboard_content %}
+    <div class="card">
+        <h3>Reward Students</h3>
+        <div class="form-group">
+            <label for="rewardTo">Student:</label>
+            <select id="rewardTo" class="form-control"></select>
+        </div>
+        <div class="form-group">
+            <label for="rewardAmount">Amount:</label>
+            <input type="number" id="rewardAmount" class="form-control" min="1">
+        </div>
+        <div class="form-group">
+            <label for="rewardReason">Activity/Achievement:</label>
+            <input type="text" id="rewardReason" class="form-control" placeholder="Reason for rewarding">
+        </div>
+        <button id="rewardBtn" class="btn btn-success">Reward Student</button>
+    </div>
+    
+    <div class="card">
+        <h3>Transfer Tokens</h3>
+        <div class="form-group">
+            <label for="transferTo">Recipient:</label>
+            <select id="transferTo" class="form-control"></select>
+        </div>
+        <div class="form-group">
+            <label for="transferAmount">Amount:</label>
+            <input type="number" id="transferAmount" class="form-control" min="1">
+        </div>
+        <button id="transferBtn" class="btn btn-primary">Transfer Tokens</button>
+    </div>
+
+    <div class="card">
+        <h3>Recent Activities</h3>
+        <div id="activityLog">
+            <p id="noActivities" style="display: none;">No recent activities</p>
+        </div>
+    </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', async function() {
+    if (await checkWalletConnection()) {
+        updateBalance();
+        loadAccounts('rewardTo', 'student');
+        loadAccounts('transferTo');
+        loadActivityHistory();
+        
+        document.getElementById('rewardBtn').addEventListener('click', async function() {
+            const student = document.getElementById('rewardTo').value;
+            const amount = document.getElementById('rewardAmount').value;
+            const reason = document.getElementById('rewardReason').value;
+            
+            if (!student || !amount || amount <= 0 || !reason) {
+                showTransactionStatus('Please fill all fields correctly', true);
+                return;
+            }
+            
+            try {
+                showTransactionStatus('Initiating transaction... please confirm in MetaMask');
+                console.log(`Rewarding ${amount} CC to ${student} for: ${reason}`);
+                
+                const balance = await campusCoinContract.methods.balanceOf(userAccount).call();
+                console.log(`Current balance: ${balance} CC`);
+                if (parseInt(balance) < parseInt(amount)) {
+                    showTransactionStatus(`Insufficient balance. You have ${balance} CC but trying to send ${amount} CC`, true);
+                    return;
+                }
+                
+                const result = await sendEnhancedTransaction(
+                    campusCoinContract, 
+                    'rewardStudent',
+                    [student, amount, reason],
+                    userAccount
+                );
+                
+                if (result.success) {
+                    showTransactionStatus(`Successfully rewarded ${amount} CC to ${student} for: ${reason}`);
+                    addActivity('Reward', `Rewarded ${amount} CC to ${student} - Achievement: ${reason}`, result.txHash);
+                    setTimeout(() => {
+                        updateBalance();
+                    }, 1000);
+                } else {
+                    showTransactionStatus(`Transaction failed: ${result.message}`, true);
+                }
+            } catch (error) {
+                console.error("Reward error:", error);
+                const errorMsg = await decodeTransactionError(error);
+                showTransactionStatus(`Transaction failed: ${errorMsg}`, true);
+            }
+        });
+        
+        document.getElementById('transferBtn').addEventListener('click', async function() {
+            const to = document.getElementById('transferTo').value;
+            const amount = document.getElementById('transferAmount').value;
+            
+            if (!to || !amount || amount <= 0) {
+                showTransactionStatus('Please fill all fields correctly', true);
+                return;
+            }
+            
+            try {
+                showTransactionStatus('Initiating transaction... please confirm in MetaMask');
+                console.log(`Transferring ${amount} CC to ${to}`);
+                
+                const balance = await campusCoinContract.methods.balanceOf(userAccount).call();
+                console.log(`Current balance: ${balance} CC`);
+                if (parseInt(balance) < parseInt(amount)) {
+                    showTransactionStatus(`Insufficient balance. You have ${balance} CC but trying to send ${amount} CC`, true);
+                    return;
+                }
+                
+                const result = await sendEnhancedTransaction(
+                    campusCoinContract,
+                    'transfer',
+                    [to, amount],
+                    userAccount
+                );
+                
+                if (result.success) {
+                    showTransactionStatus(`Successfully transferred ${amount} CC to ${to}`);
+                    addActivity('Transfer', `Sent ${amount} CC to ${to}`, result.txHash);
+                    setTimeout(() => {
+                        updateBalance();
+                    }, 1000);
+                } else {
+                    showTransactionStatus(`Transaction failed: ${result.message}`, true);
+                }
+            } catch (error) {
+                console.error("Transfer error:", error);
+                const errorMsg = await decodeTransactionError(error);
+                showTransactionStatus(`Transaction failed: ${errorMsg}`, true);
+            }
+        });
+
+        function addActivity(type, description, txHash) {
+            const activities = JSON.parse(localStorage.getItem(`activities_${userAccount}`) || '[]');
+            
+            activities.unshift({
+                type: type,
+                description: description,
+                txHash: txHash,
+                timestamp: new Date().toISOString(),
+                role: 'Organizer'
+            });
+            
+            const limitedActivities = activities.slice(0, 10);
+            
+            localStorage.setItem(`activities_${userAccount}`, JSON.stringify(limitedActivities));
+            
+            loadActivityHistory();
+        }
+        function loadActivityHistory() {
+            const activityLog = document.getElementById('activityLog');
+            const noActivities = document.getElementById('noActivities');
+            
+            const activities = JSON.parse(localStorage.getItem(`activities_${userAccount}`) || '[]');
+            
+            activityLog.innerHTML = '';
+            
+            if (activities.length === 0) {
+                activityLog.appendChild(noActivities);
+                return;
+            }
+        
+            const table = document.createElement('table');
+            table.className = 'activity-table';
+            
+            const thead = document.createElement('thead');
+            thead.innerHTML = `
+                <tr>
+                    <th>Date</th>
+                    <th>Role</th>
+                    <th>Type</th>
+                    <th>Description</th>
+                </tr>
+            `;
+            table.appendChild(thead);
+            
+            const tbody = document.createElement('tbody');
+            activities.forEach(activity => {
+                const row = document.createElement('tr');
+                
+                const date = new Date(activity.timestamp);
+                const formattedDate = `${date.toLocaleDateString()} ${date.toLocaleTimeString()}`;
+                
+                row.innerHTML = `
+                    <td>${formattedDate}</td>
+                    <td>${activity.role || 'Organizer'}</td>
+                    <td>${activity.type}</td>
+                    <td>${activity.description}</td>
+                `;
+                tbody.appendChild(row);
+            });
+            table.appendChild(tbody);
+            activityLog.appendChild(table);
+        }
+    } else {
+        window.location.href = '/';
+    }
+});
+</script>
+{% endblock %}
