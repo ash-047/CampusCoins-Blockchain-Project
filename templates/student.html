@@ -1,0 +1,164 @@
+{% extends "dashboard.html" %}
+
+{% block title %}CampusCoins - Student Dashboard{% endblock %}
+
+{% block role_class %}student{% endblock %}
+{% block role_name %}Student{% endblock %}
+
+{% block dashboard_title %}Student Dashboard{% endblock %}
+
+{% block dashboard_content %}
+    <div class="card">
+        <h3>Transfer Tokens</h3>
+        <div class="form-group">
+            <label for="transferTo">Recipient:</label>
+            <select id="transferTo" class="form-control"></select>
+        </div>
+        <div class="form-group">
+            <label for="transferAmount">Amount:</label>
+            <input type="number" id="transferAmount" class="form-control" min="1">
+        </div>
+        <button id="transferBtn" class="btn btn-primary">Transfer Tokens</button>
+    </div>
+    <div class="card">
+        <h3>Recent Activities</h3>
+        <div id="activityLog" class="activity-log">
+            <p id="noActivities" style="display: none;">No recent activities to display.</p>
+        </div>
+    </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let studentSRN = '';
+let allAccountsCache = [];
+document.addEventListener('DOMContentLoaded', async function() {
+    if (await checkWalletConnection()) {
+        updateBalance();
+        allAccountsCache = await fetchAccountsFromBackend();
+        loadAccounts('transferTo');
+        try {
+            const currentAccount = allAccountsCache.find(acc => acc.address.toLowerCase() === userAccount.toLowerCase());
+            if (currentAccount && currentAccount.displayName.startsWith('PES')) {
+                studentSRN = currentAccount.displayName;
+            }
+        } catch (error) {
+            console.error('Error fetching student SRN:', error);
+        }
+        document.getElementById('transferBtn').addEventListener('click', async function() {
+            const transferSelect = document.getElementById('transferTo');
+            const to = transferSelect.value;
+            const amount = document.getElementById('transferAmount').value;
+            if (!to || !amount || amount <= 0) {
+                showTransactionStatus('Please fill all fields correctly', true);
+                return;
+            }
+            try {
+                const tx = await campusCoinContract.methods.transfer(to, amount).send({ from: userAccount });
+                showTransactionStatus(`Successfully transferred ${amount} CC to ${to}`);
+                updateBalance();
+                const recipientAccount = allAccountsCache.find(acc => acc.address.toLowerCase() === to.toLowerCase());
+                let recipientDisplay = to;
+                if (recipientAccount) {
+                    if (recipientAccount.role === 'student') {
+                        recipientDisplay = `Student (${recipientAccount.displayName})`;
+                    } else {
+                        recipientDisplay = recipientAccount.displayName;
+                    }
+                }
+                addActivity('Transfer', `Sent ${amount} CC to ${recipientDisplay}`, tx.transactionHash);
+            } catch (error) {
+                console.error("Transfer error:", error);
+                showTransactionStatus('Transaction failed: ' + (error.message || 'Error'), true);
+            }
+        });
+        loadActivityHistory();
+        listenForTransferEvents();
+    } else {
+        window.location.href = '/';
+    }
+});
+
+function addActivity(type, description, txHash) {
+    const activities = JSON.parse(localStorage.getItem(`activities_${userAccount}`) || '[]');
+    activities.unshift({
+        type: type,
+        description: description,
+        txHash: txHash,
+        timestamp: new Date().toISOString(),
+        role: studentSRN ? `Student (${studentSRN})` : 'Student'
+    });
+    
+    const limitedActivities = activities.slice(0, 10);
+    localStorage.setItem(`activities_${userAccount}`, JSON.stringify(limitedActivities));
+    loadActivityHistory();
+}
+
+function loadActivityHistory() {
+    const activityLog = document.getElementById('activityLog');
+    const noActivities = document.getElementById('noActivities');
+    const activities = JSON.parse(localStorage.getItem(`activities_${userAccount}`) || '[]');
+    activityLog.innerHTML = '';
+    if (activities.length === 0) {
+        activityLog.appendChild(noActivities);
+        return;
+    }
+    const table = document.createElement('table');
+    table.className = 'activity-table';
+    const thead = document.createElement('thead');
+    thead.innerHTML = `
+        <tr>
+            <th>Date</th>
+            <th>Role</th>
+            <th>Type</th>
+            <th>Description</th>
+        </tr>
+    `;
+    table.appendChild(thead);
+    const tbody = document.createElement('tbody');
+    activities.forEach(activity => {
+        const row = document.createElement('tr');
+        const date = new Date(activity.timestamp);
+        const formattedDate = `${date.toLocaleDateString()} ${date.toLocaleTimeString()}`;
+        row.innerHTML = `
+            <td>${formattedDate}</td>
+            <td>${activity.role}</td>
+            <td>${activity.type}</td>
+            <td>${activity.description}</td>
+        `;
+        tbody.appendChild(row);
+    });
+    table.appendChild(tbody);
+    activityLog.appendChild(table);
+}
+
+async function listenForTransferEvents() {
+    try {
+        const pastEvents = await campusCoinContract.getPastEvents('Transfer', {
+            filter: {to: userAccount},
+            fromBlock: 0,
+            toBlock: 'latest'
+        });
+        for (const event of pastEvents) {
+            const from = event.returnValues.from;
+            const to = event.returnValues.to;
+            const value = event.returnValues.value;
+            if (to.toLowerCase() === userAccount.toLowerCase() && from !== '0x0000000000000000000000000000000000000000') {
+                const senderAccount = allAccountsCache.find(acc => acc.address.toLowerCase() === from.toLowerCase());
+                let senderDisplay = from;
+                if (senderAccount) {
+                    if (senderAccount.role === 'student') {
+                        senderDisplay = `Student (${senderAccount.displayName})`;
+                    } else {
+                        senderDisplay = senderAccount.displayName;
+                    }
+                }
+                addActivity('Received', `Received ${value} CC from ${senderDisplay}`, event.transactionHash);
+            }
+        }
+    } catch (error) {
+        console.error("Error retrieving transfer events:", error);
+    }
+}
+</script>
+{% endblock %}
