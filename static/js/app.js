@@ -2,23 +2,9 @@ let web3;
 let campusCoinContract;
 let userAccount;
 let userRole;
+let allAccounts = []; // Will store account data from the backend
 
-// Role mappings from Ganache accounts
-const ROLE_MAPPINGS = {
-    '0x10787572daaE58789b74b131c48EF4e93E00dA06': 'admin',
-    '0x4977451329D69861613A220837b2f1C61F31C531': 'organizer',
-    '0xFCEe892f01345D3364a86c79Ac2C1CD7c53da0Cd': 'organizer',
-    '0x9c86495CF5d83Af41a376E1865dac9F3E127a688': 'canteen',
-    '0xCa5D12aE19785C30a4Dc90aD26B96DC00e2053eB': 'canteen',
-    '0x839B74A47a63e4cDdfB02a52EcD98c4aB23183fe': 'student',
-    '0xC9ecEf5042F913c65AA0Fcd81E0D6202f90DE2f7': 'student',
-    '0xFe9b60BE72C7666901303732d37aF49B09871c35': 'student',
-    '0x1D9CE4f79d7ccFD9cf08Eb747c610C6c045d1B94': 'student',
-    '0xb0059F146C41178960684b1F74d8e6c3e1E204b8': 'student',
-};
-
-// Contract address - to be updated after deployment
-const CONTRACT_ADDRESS = '0x76bD69B1594161b92006BA0ad6b6901006f70772';
+const CONTRACT_ADDRESS = '0x7167fE860359D0740EDfeB7FFf907952F1daCDE9';
 
 async function connectWallet() {
     if (window.ethereum) {
@@ -58,6 +44,8 @@ async function verifyRoleFromBlockchain() {
         if (userAccount.toLowerCase() === adminAddress.toLowerCase()) {
             userRole = 'admin';
             console.log("Role verified from blockchain: admin");
+            // Set role in session
+            await setRoleInSession(userAccount, userRole);
             return;
         }
         
@@ -66,6 +54,8 @@ async function verifyRoleFromBlockchain() {
         if (isOrganizer) {
             userRole = 'organizer';
             console.log("Role verified from blockchain: organizer");
+            // Set role in session
+            await setRoleInSession(userAccount, userRole);
             return;
         }
         
@@ -74,24 +64,44 @@ async function verifyRoleFromBlockchain() {
         if (isCanteen) {
             userRole = 'canteen';
             console.log("Role verified from blockchain: canteen");
+            // Set role in session
+            await setRoleInSession(userAccount, userRole);
             return;
         }
         
         // Default to student
         userRole = 'student';
         console.log("Role verified from blockchain: student (default)");
+        // Set role in session
+        await setRoleInSession(userAccount, userRole);
     } catch (error) {
         console.error("Error verifying role from blockchain:", error);
-        // Fallback to role mappings if blockchain verification fails
-        const formattedAccount = userAccount.toLowerCase();
-        for (const [address, role] of Object.entries(ROLE_MAPPINGS)) {
-            if (address.toLowerCase() === formattedAccount) {
-                userRole = role;
-                console.log("Role determined from mappings:", userRole);
-                return;
-            }
-        }
+        // We'll still default to student role
         userRole = 'student';
+        await setRoleInSession(userAccount, userRole);
+    }
+}
+
+// Function to set the user's role in the Flask session
+async function setRoleInSession(address, role) {
+    try {
+        const response = await fetch('/set-role', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                address: address,
+                role: role
+            })
+        });
+        
+        const data = await response.json();
+        if (!data.success) {
+            console.error('Failed to set role in session:', data.error);
+        }
+    } catch (error) {
+        console.error('Error setting role in session:', error);
     }
 }
 
@@ -153,7 +163,7 @@ function showTransactionStatus(message, isError = false) {
         statusElement.className = isError ? 'transaction-status error' : 'transaction-status success';
         statusElement.style.display = 'block';
         
-        // Hide status after 10 seconds instead of 5
+        // Hide status after 10 seconds
         setTimeout(() => {
             statusElement.style.display = 'none';
         }, 10000);
@@ -164,6 +174,29 @@ function showTransactionStatus(message, isError = false) {
         console.error(message);
     } else {
         console.log(message);
+    }
+}
+
+// Fetch all account data from backend
+async function fetchAccountsFromBackend() {
+    try {
+        showTransactionStatus('Loading accounts...');
+        const response = await fetch('/accounts');
+        const data = await response.json();
+        
+        if (data.error) {
+            console.error('Error fetching accounts:', data.error);
+            showTransactionStatus('Error loading accounts: ' + data.error, true);
+            return [];
+        }
+        
+        console.log('Accounts loaded:', data.accounts.length);
+        showTransactionStatus(`Successfully loaded ${data.accounts.length} accounts`);
+        return data.accounts;
+    } catch (error) {
+        console.error('Error fetching accounts:', error);
+        showTransactionStatus('Error loading accounts: ' + error.message, true);
+        return [];
     }
 }
 
@@ -181,15 +214,26 @@ async function loadAccounts(selectElementId, role = null) {
     defaultOption.value = "";
     selectElement.add(defaultOption);
     
-    // Add accounts based on role filter
-    Object.entries(ROLE_MAPPINGS).forEach(([address, accountRole]) => {
-        if (role === null || accountRole === role) {
-            const option = document.createElement('option');
-            option.text = `${address} (${accountRole})`;
-            option.value = address;
-            selectElement.add(option);
+    try {
+        // Get accounts from backend API if not already loaded
+        if (allAccounts.length === 0) {
+            allAccounts = await fetchAccountsFromBackend();
         }
-    });
+        
+        // Add accounts based on role filter
+        for (const account of allAccounts) {
+            // Add to dropdown if role matches filter or no filter is applied
+            if (role === null || account.role === role) {
+                const option = document.createElement('option');
+                option.text = account.displayName;
+                option.value = account.address;
+                selectElement.add(option);
+            }
+        }
+    } catch (error) {
+        console.error("Error loading accounts:", error);
+        showTransactionStatus('Failed to load accounts: ' + error.message, true);
+    }
 }
 
 document.addEventListener('DOMContentLoaded', async function() {
@@ -200,10 +244,20 @@ document.addEventListener('DOMContentLoaded', async function() {
     
     const isConnected = await checkWalletConnection();
     if (isConnected) {
-        if (document.getElementById('walletAddress')) {
-            document.getElementById('walletAddress').innerText = userAccount;
-            document.getElementById('connectWallet').style.display = 'none';
-            document.getElementById('walletInfo').style.display = 'block';
+        const walletAddressElement = document.getElementById('walletAddress');
+        if (walletAddressElement) {
+            walletAddressElement.innerText = userAccount;
+        }
+        
+        const connectWalletBtn = document.getElementById('connectWallet');
+        const walletInfoElement = document.getElementById('walletInfo');
+        
+        if (connectWalletBtn) {
+            connectWalletBtn.style.display = 'none';
+        }
+        
+        if (walletInfoElement) {
+            walletInfoElement.style.display = 'block';
         }
         
         // Update balance if on a dashboard page

@@ -37,6 +37,13 @@
         </div>
         <button id="transferBtn" class="btn btn-primary">Transfer Tokens</button>
     </div>
+
+    <div class="card">
+        <h3>Recent Activities</h3>
+        <div id="activityLog">
+            <p id="noActivities" style="display: none;">No recent activities</p>
+        </div>
+    </div>
 {% endblock %}
 
 {% block extra_js %}
@@ -49,6 +56,8 @@ document.addEventListener('DOMContentLoaded', async function() {
         loadAccounts('rewardTo', 'student');
         // Load all accounts for transfer dropdown
         loadAccounts('transferTo');
+        // Load activity history
+        loadActivityHistory();
         
         // Reward student
         document.getElementById('rewardBtn').addEventListener('click', async function() {
@@ -83,6 +92,8 @@ document.addEventListener('DOMContentLoaded', async function() {
                 
                 if (result.success) {
                     showTransactionStatus(`Successfully rewarded ${amount} CC to ${student} for: ${reason}`);
+                    // Add to activity log
+                    addActivity('Reward', `Rewarded ${amount} CC to ${student} - Achievement: ${reason}`, result.txHash);
                     setTimeout(() => {
                         updateBalance();
                     }, 1000);
@@ -128,6 +139,8 @@ document.addEventListener('DOMContentLoaded', async function() {
                 
                 if (result.success) {
                     showTransactionStatus(`Successfully transferred ${amount} CC to ${to}`);
+                    // Add to activity log
+                    addActivity('Transfer', `Sent ${amount} CC to ${to}`, result.txHash);
                     setTimeout(() => {
                         updateBalance();
                     }, 1000);
@@ -140,6 +153,85 @@ document.addEventListener('DOMContentLoaded', async function() {
                 showTransactionStatus(`Transaction failed: ${errorMsg}`, true);
             }
         });
+
+        // Function to add an activity to the activity log
+        function addActivity(type, description, txHash) {
+            // Get activities from localStorage or initialize empty array
+            const activities = JSON.parse(localStorage.getItem(`activities_${userAccount}`) || '[]');
+            
+            // Add new activity
+            activities.unshift({
+                type: type,
+                description: description,
+                txHash: txHash,
+                timestamp: new Date().toISOString(),
+                role: 'Organizer'
+            });
+            
+            // Keep only the last 10 activities
+            const limitedActivities = activities.slice(0, 10);
+            
+            // Save to localStorage
+            localStorage.setItem(`activities_${userAccount}`, JSON.stringify(limitedActivities));
+            
+            // Update UI
+            loadActivityHistory();
+        }
+
+        // Function to load activity history from localStorage
+        function loadActivityHistory() {
+            const activityLog = document.getElementById('activityLog');
+            const noActivities = document.getElementById('noActivities');
+            
+            // Get activities from localStorage
+            const activities = JSON.parse(localStorage.getItem(`activities_${userAccount}`) || '[]');
+            
+            // Clear current content
+            activityLog.innerHTML = '';
+            
+            if (activities.length === 0) {
+                activityLog.appendChild(noActivities);
+                return;
+            }
+            
+            // Create a table for activities
+            const table = document.createElement('table');
+            table.className = 'activity-table';
+            
+            // Add header row
+            const thead = document.createElement('thead');
+            thead.innerHTML = `
+                <tr>
+                    <th>Date</th>
+                    <th>Role</th>
+                    <th>Type</th>
+                    <th>Description</th>
+                </tr>
+            `;
+            table.appendChild(thead);
+            
+            // Add body rows
+            const tbody = document.createElement('tbody');
+            activities.forEach(activity => {
+                const row = document.createElement('tr');
+                
+                // Format date
+                const date = new Date(activity.timestamp);
+                const formattedDate = `${date.toLocaleDateString()} ${date.toLocaleTimeString()}`;
+                
+                row.innerHTML = `
+                    <td>${formattedDate}</td>
+                    <td>${activity.role || 'Organizer'}</td>
+                    <td>${activity.type}</td>
+                    <td>${activity.description}</td>
+                `;
+                tbody.appendChild(row);
+            });
+            table.appendChild(tbody);
+            
+            // Add table to activity log
+            activityLog.appendChild(table);
+        }
     } else {
         window.location.href = '/';
     }

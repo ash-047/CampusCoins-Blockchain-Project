@@ -22,24 +22,40 @@
     </div>
     
     <div class="card">
-        <h3>Recent Activity</h3>
-        <div id="activityLog">
-            <p>Your activities will appear here...</p>
+        <h3>Recent Activities</h3>
+        <div id="activityLog" class="activity-log">
+            <p id="noActivities" style="display: none;">No recent activities to display.</p>
         </div>
     </div>
 {% endblock %}
 
 {% block extra_js %}
 <script>
+let studentSRN = '';
+let allAccountsCache = [];
+
 document.addEventListener('DOMContentLoaded', async function() {
     if (await checkWalletConnection()) {
         updateBalance();
+        // Load all accounts and cache them
+        allAccountsCache = await fetchAccountsFromBackend();
         // Load all accounts for transfer dropdown
         loadAccounts('transferTo');
         
+        // Get student SRN from backend
+        try {
+            const currentAccount = allAccountsCache.find(acc => acc.address.toLowerCase() === userAccount.toLowerCase());
+            if (currentAccount && currentAccount.displayName.startsWith('PES')) {
+                studentSRN = currentAccount.displayName;
+            }
+        } catch (error) {
+            console.error('Error fetching student SRN:', error);
+        }
+        
         // Transfer tokens
         document.getElementById('transferBtn').addEventListener('click', async function() {
-            const to = document.getElementById('transferTo').value;
+            const transferSelect = document.getElementById('transferTo');
+            const to = transferSelect.value;
             const amount = document.getElementById('transferAmount').value;
             
             if (!to || !amount || amount <= 0) {
@@ -48,20 +64,154 @@ document.addEventListener('DOMContentLoaded', async function() {
             }
             
             try {
-                await campusCoinContract.methods.transfer(to, amount).send({ from: userAccount });
+                const tx = await campusCoinContract.methods.transfer(to, amount).send({ from: userAccount });
                 showTransactionStatus(`Successfully transferred ${amount} CC to ${to}`);
                 updateBalance();
+                
+                // Get recipient's display name and role
+                const recipientAccount = allAccountsCache.find(acc => acc.address.toLowerCase() === to.toLowerCase());
+                let recipientDisplay = to;
+                if (recipientAccount) {
+                    if (recipientAccount.role === 'student') {
+                        recipientDisplay = `Student (${recipientAccount.displayName})`;
+                    } else {
+                        recipientDisplay = recipientAccount.displayName;
+                    }
+                }
+                
+                // Add to activity log
+                addActivity('Transfer', `Sent ${amount} CC to ${recipientDisplay}`, tx.transactionHash);
             } catch (error) {
                 console.error("Transfer error:", error);
                 showTransactionStatus('Transaction failed: ' + (error.message || 'Error'), true);
             }
         });
         
-        // We would ideally load transaction history here
-        // However, for simplicity, we'll just display a placeholder
+        // Load transaction history
+        loadActivityHistory();
+        
+        // Listen for incoming transfers
+        listenForTransferEvents();
     } else {
         window.location.href = '/';
     }
 });
+
+// Function to add an activity to the activity log
+function addActivity(type, description, txHash) {
+    // Get activities from localStorage or initialize empty array
+    const activities = JSON.parse(localStorage.getItem(`activities_${userAccount}`) || '[]');
+    
+    // Add new activity
+    activities.unshift({
+        type: type,
+        description: description,
+        txHash: txHash,
+        timestamp: new Date().toISOString(),
+        role: studentSRN ? `Student (${studentSRN})` : 'Student'
+    });
+    
+    // Keep only the last 10 activities
+    const limitedActivities = activities.slice(0, 10);
+    
+    // Save to localStorage
+    localStorage.setItem(`activities_${userAccount}`, JSON.stringify(limitedActivities));
+    
+    // Update UI
+    loadActivityHistory();
+}
+
+// Function to load activity history from localStorage
+function loadActivityHistory() {
+    const activityLog = document.getElementById('activityLog');
+    const noActivities = document.getElementById('noActivities');
+    
+    // Get activities from localStorage
+    const activities = JSON.parse(localStorage.getItem(`activities_${userAccount}`) || '[]');
+    
+    // Clear current content
+    activityLog.innerHTML = '';
+    
+    if (activities.length === 0) {
+        activityLog.appendChild(noActivities);
+        return;
+    }
+    
+    // Create a table for activities
+    const table = document.createElement('table');
+    table.className = 'activity-table';
+    
+    // Add header row
+    const thead = document.createElement('thead');
+    thead.innerHTML = `
+        <tr>
+            <th>Date</th>
+            <th>Role</th>
+            <th>Type</th>
+            <th>Description</th>
+        </tr>
+    `;
+    table.appendChild(thead);
+    
+    // Add body rows
+    const tbody = document.createElement('tbody');
+    activities.forEach(activity => {
+        const row = document.createElement('tr');
+        
+        // Format date
+        const date = new Date(activity.timestamp);
+        const formattedDate = `${date.toLocaleDateString()} ${date.toLocaleTimeString()}`;
+        
+        row.innerHTML = `
+            <td>${formattedDate}</td>
+            <td>${activity.role}</td>
+            <td>${activity.type}</td>
+            <td>${activity.description}</td>
+        `;
+        tbody.appendChild(row);
+    });
+    table.appendChild(tbody);
+    
+    // Add table to activity log
+    activityLog.appendChild(table);
+}
+
+// Function to listen for transfer events to the user
+async function listenForTransferEvents() {
+    try {
+        // Get past Transfer events where the user is the recipient
+        const pastEvents = await campusCoinContract.getPastEvents('Transfer', {
+            filter: {to: userAccount},
+            fromBlock: 0,
+            toBlock: 'latest'
+        });
+        
+        // Process past events
+        for (const event of pastEvents) {
+            const from = event.returnValues.from;
+            const to = event.returnValues.to;
+            const value = event.returnValues.value;
+            
+            // Only process events where user is recipient and sender isn't zero address (minting)
+            if (to.toLowerCase() === userAccount.toLowerCase() && from !== '0x0000000000000000000000000000000000000000') {
+                // Get sender's display name and role
+                const senderAccount = allAccountsCache.find(acc => acc.address.toLowerCase() === from.toLowerCase());
+                let senderDisplay = from;
+                if (senderAccount) {
+                    if (senderAccount.role === 'student') {
+                        senderDisplay = `Student (${senderAccount.displayName})`;
+                    } else {
+                        senderDisplay = senderAccount.displayName;
+                    }
+                }
+                
+                // Add to activity history
+                addActivity('Received', `Received ${value} CC from ${senderDisplay}`, event.transactionHash);
+            }
+        }
+    } catch (error) {
+        console.error("Error retrieving transfer events:", error);
+    }
+}
 </script>
 {% endblock %}

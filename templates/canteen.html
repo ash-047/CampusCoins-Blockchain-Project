@@ -32,6 +32,13 @@
             <p>Student Balance: <span id="studentBalance" class="balance-display">0</span> CC</p>
         </div>
     </div>
+
+    <div class="card">
+        <h3>Recent Activities</h3>
+        <div id="activityLog">
+            <p id="noActivities" style="display: none;">No recent activities</p>
+        </div>
+    </div>
 {% endblock %}
 
 {% block extra_js %}
@@ -42,6 +49,8 @@ document.addEventListener('DOMContentLoaded', async function() {
         // Load student accounts for the dropdowns
         loadAccounts('redeemFrom', 'student');
         loadAccounts('checkStudent', 'student');
+        // Load activity history
+        loadActivityHistory();
         
         // Redeem tokens
         document.getElementById('redeemBtn').addEventListener('click', async function() {
@@ -54,8 +63,10 @@ document.addEventListener('DOMContentLoaded', async function() {
             }
             
             try {
-                await campusCoinContract.methods.redeemTokens(student, amount).send({ from: userAccount });
+                const result = await campusCoinContract.methods.redeemTokens(student, amount).send({ from: userAccount });
                 showTransactionStatus(`Successfully redeemed ${amount} CC from ${student}`);
+                // Add to activity log
+                addActivity('Redeem', `Redeemed ${amount} CC from ${student}`, result.transactionHash);
                 updateBalance();
             } catch (error) {
                 console.error("Redeem error:", error);
@@ -76,11 +87,92 @@ document.addEventListener('DOMContentLoaded', async function() {
                 const balance = await getBalance(student);
                 document.getElementById('studentBalance').innerText = balance;
                 document.getElementById('studentBalanceDisplay').style.display = 'block';
+                // Add to activity log
+                addActivity('Check Balance', `Checked balance for student ${student}: ${balance} CC`);
             } catch (error) {
                 console.error("Check balance error:", error);
                 showTransactionStatus('Failed to check balance: ' + (error.message || 'Error'), true);
             }
         });
+
+        // Function to add an activity to the activity log
+        function addActivity(type, description, txHash = null) {
+            // Get activities from localStorage or initialize empty array
+            const activities = JSON.parse(localStorage.getItem(`activities_${userAccount}`) || '[]');
+            
+            // Add new activity
+            activities.unshift({
+                type: type,
+                description: description,
+                txHash: txHash,
+                timestamp: new Date().toISOString(),
+                role: 'Canteen Staff'
+            });
+            
+            // Keep only the last 10 activities
+            const limitedActivities = activities.slice(0, 10);
+            
+            // Save to localStorage
+            localStorage.setItem(`activities_${userAccount}`, JSON.stringify(limitedActivities));
+            
+            // Update UI
+            loadActivityHistory();
+        }
+
+        // Function to load activity history from localStorage
+        function loadActivityHistory() {
+            const activityLog = document.getElementById('activityLog');
+            const noActivities = document.getElementById('noActivities');
+            
+            // Get activities from localStorage
+            const activities = JSON.parse(localStorage.getItem(`activities_${userAccount}`) || '[]');
+            
+            // Clear current content
+            activityLog.innerHTML = '';
+            
+            if (activities.length === 0) {
+                activityLog.appendChild(noActivities);
+                return;
+            }
+            
+            // Create a table for activities
+            const table = document.createElement('table');
+            table.className = 'activity-table';
+            
+            // Add header row
+            const thead = document.createElement('thead');
+            thead.innerHTML = `
+                <tr>
+                    <th>Date</th>
+                    <th>Role</th>
+                    <th>Type</th>
+                    <th>Description</th>
+                </tr>
+            `;
+            table.appendChild(thead);
+            
+            // Add body rows
+            const tbody = document.createElement('tbody');
+            activities.forEach(activity => {
+                const row = document.createElement('tr');
+                
+                // Format date
+                const date = new Date(activity.timestamp);
+                const formattedDate = `${date.toLocaleDateString()} ${date.toLocaleTimeString()}`;
+                
+                row.innerHTML = `
+                    <td>${formattedDate}</td>
+                    <td>${activity.role || 'Canteen Staff'}</td>
+                    <td>${activity.type}</td>
+                    <td>${activity.description}</td>
+                `;
+                tbody.appendChild(row);
+            });
+            table.appendChild(tbody);
+            
+            // Add table to activity log
+            activityLog.appendChild(table);
+        }
     } else {
         window.location.href = '/';
     }

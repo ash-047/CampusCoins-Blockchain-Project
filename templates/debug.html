@@ -24,11 +24,12 @@
             
             <div style="margin-top: 20px;">
                 <h3>Role Mappings</h3>
-                <table style="width: 100%; border-collapse: collapse;">
+                <table class="activity-table">
                     <thead>
-                        <tr style="background-color: #f2f2f2;">
-                            <th style="text-align: left; padding: 8px; border: 1px solid #ddd;">Address</th>
-                            <th style="text-align: left; padding: 8px; border: 1px solid #ddd;">Role</th>
+                        <tr>
+                            <th>Address</th>
+                            <th>Role</th>
+                            <th>Display Name</th>
                         </tr>
                     </thead>
                     <tbody id="roleTable">
@@ -40,24 +41,12 @@
     </div>
     
     <script src="https://cdn.jsdelivr.net/npm/web3@1.5.2/dist/web3.min.js"></script>
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
     <script>
         let web3;
         let userAccount;
         let userRole;
-        
-        // Role mappings from Ganache accounts
-        const ROLE_MAPPINGS = {
-            '0x10787572daaE58789b74b131c48EF4e93E00dA06': 'admin',
-            '0x4977451329D69861613A220837b2f1C61F31C531': 'organizer',
-            '0xFCEe892f01345D3364a86c79Ac2C1CD7c53da0Cd': 'organizer',
-            '0x9c86495CF5d83Af41a376E1865dac9F3E127a688': 'canteen',
-            '0xCa5D12aE19785C30a4Dc90aD26B96DC00e2053eB': 'canteen',
-            '0x839B74A47a63e4cDdfB02a52EcD98c4aB23183fe': 'student',
-            '0xC9ecEf5042F913c65AA0Fcd81E0D6202f90DE2f7': 'student',
-            '0xFe9b60BE72C7666901303732d37aF49B09871c35': 'student',
-            '0x1D9CE4f79d7ccFD9cf08Eb747c610C6c045d1B94': 'student',
-            '0xb0059F146C41178960684b1F74d8e6c3e1E204b8': 'student',
-        };
+        let allAccounts = [];
         
         async function connectWallet() {
             if (window.ethereum) {
@@ -81,29 +70,45 @@
             }
         }
         
-        function checkRole() {
+        async function checkRole() {
             if (!userAccount) return;
             
-            // Ensure we get the case-insensitive comparison
-            const formattedAccount = userAccount.toLowerCase();
-            
-            // Find the matching address in our role mappings
-            let foundRole = null;
-            for (const [address, role] of Object.entries(ROLE_MAPPINGS)) {
-                if (address.toLowerCase() === formattedAccount) {
-                    userRole = role;
-                    foundRole = role;
-                    break;
+            try {
+                // Get contract ABI and instantiate contract
+                if (!campusCoinContract) {
+                    const response = await fetch('/contract-abi');
+                    const abi = await response.json();
+                    campusCoinContract = new web3.eth.Contract(abi, CONTRACT_ADDRESS);
                 }
+                
+                // Verify roles from the blockchain
+                // Check if admin
+                const adminAddress = await campusCoinContract.methods.admin().call();
+                if (userAccount.toLowerCase() === adminAddress.toLowerCase()) {
+                    userRole = 'admin';
+                } else {
+                    // Check if organizer
+                    const isOrganizer = await campusCoinContract.methods.isOrganizer(userAccount).call();
+                    if (isOrganizer) {
+                        userRole = 'organizer';
+                    } else {
+                        // Check if canteen staff
+                        const isCanteen = await campusCoinContract.methods.isCanteenStaff(userAccount).call();
+                        if (isCanteen) {
+                            userRole = 'canteen';
+                        } else {
+                            // Default to student
+                            userRole = 'student';
+                        }
+                    }
+                }
+                
+                document.getElementById('detectedRole').innerText = userRole;
+                showStatus(`Role detected: ${userRole} for account ${userAccount}`);
+            } catch (error) {
+                console.error("Error checking role:", error);
+                showStatus(`Error checking role: ${error.message}`, true);
             }
-            
-            // Default to student if no role found
-            if (!foundRole) {
-                userRole = 'student';
-            }
-            
-            document.getElementById('detectedRole').innerText = userRole;
-            showStatus(`Role detected: ${userRole} for account ${userAccount}`);
         }
         
         function showStatus(message, isError = false) {
@@ -118,25 +123,42 @@
             }, 5000);
         }
         
-        function populateRoleTable() {
-            const tableBody = document.getElementById('roleTable');
-            
-            for (const [address, role] of Object.entries(ROLE_MAPPINGS)) {
-                const row = document.createElement('tr');
+        async function populateRoleTable() {
+            try {
+                const response = await fetch('/accounts');
+                const data = await response.json();
                 
-                const addressCell = document.createElement('td');
-                addressCell.style.padding = '8px';
-                addressCell.style.border = '1px solid #ddd';
-                addressCell.textContent = address;
+                if (data.error) {
+                    showStatus(`Error loading accounts: ${data.error}`, true);
+                    return;
+                }
                 
-                const roleCell = document.createElement('td');
-                roleCell.style.padding = '8px';
-                roleCell.style.border = '1px solid #ddd';
-                roleCell.textContent = role;
+                allAccounts = data.accounts;
+                const tableBody = document.getElementById('roleTable');
+                tableBody.innerHTML = '';
                 
-                row.appendChild(addressCell);
-                row.appendChild(roleCell);
-                tableBody.appendChild(row);
+                for (const account of allAccounts) {
+                    const row = document.createElement('tr');
+                    
+                    const addressCell = document.createElement('td');
+                    addressCell.textContent = account.address;
+                    
+                    const roleCell = document.createElement('td');
+                    roleCell.textContent = account.role;
+                    
+                    const nameCell = document.createElement('td');
+                    nameCell.textContent = account.displayName;
+                    
+                    row.appendChild(addressCell);
+                    row.appendChild(roleCell);
+                    row.appendChild(nameCell);
+                    tableBody.appendChild(row);
+                }
+                
+                showStatus(`Loaded ${allAccounts.length} accounts successfully`);
+            } catch (error) {
+                console.error("Error loading accounts:", error);
+                showStatus(`Error loading accounts: ${error.message}`, true);
             }
         }
         

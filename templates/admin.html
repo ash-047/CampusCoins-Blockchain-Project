@@ -37,28 +37,12 @@
         </div>
         <button id="slashBtn" class="btn btn-danger">Slash Tokens</button>
     </div>
-    
+
     <div class="card">
-        <h3>Manage Roles</h3>
-        <div class="form-group">
-            <label for="roleAddress">Address:</label>
-            <select id="roleAddress" class="form-control"></select>
+        <h3>Recent Activities</h3>
+        <div id="activityLog">
+            <p id="noActivities" style="display: none;">No recent activities</p>
         </div>
-        <div class="form-group">
-            <label for="roleType">Role:</label>
-            <select id="roleType" class="form-control">
-                <option value="organizer">Organizer</option>
-                <option value="canteen">Canteen Staff</option>
-            </select>
-        </div>
-        <div class="form-group">
-            <label for="roleStatus">Status:</label>
-            <select id="roleStatus" class="form-control">
-                <option value="true">Enable</option>
-                <option value="false">Disable</option>
-            </select>
-        </div>
-        <button id="setRoleBtn" class="btn btn-primary">Set Role</button>
     </div>
 {% endblock %}
 
@@ -71,7 +55,9 @@ document.addEventListener('DOMContentLoaded', async function() {
         // Load all accounts for the dropdowns
         loadAccounts('mintTo');
         loadAccounts('slashFrom', 'student');
-        loadAccounts('roleAddress');
+        
+        // Load activity history
+        loadActivityHistory();
         
         // Mint tokens
         document.getElementById('mintBtn').addEventListener('click', async function() {
@@ -97,6 +83,8 @@ document.addEventListener('DOMContentLoaded', async function() {
                 
                 if (result.success) {
                     showTransactionStatus(`Successfully minted ${amount} CC to ${to}`);
+                    // Add to activity log
+                    addActivity('Mint', `Minted ${amount} CC to ${to}`, result.txHash);
                     setTimeout(() => {
                         updateBalance();
                     }, 1000);
@@ -110,49 +98,121 @@ document.addEventListener('DOMContentLoaded', async function() {
             }
         });
         
-        // Set role
-        document.getElementById('setRoleBtn').addEventListener('click', async function() {
-            const address = document.getElementById('roleAddress').value;
-            const role = document.getElementById('roleType').value;
-            const status = document.getElementById('roleStatus').value === 'true';
+        // Slash tokens
+        document.getElementById('slashBtn').addEventListener('click', async function() {
+            const student = document.getElementById('slashFrom').value;
+            const amount = document.getElementById('slashAmount').value;
+            const reason = document.getElementById('slashReason').value;
             
-            if (!address) {
-                showTransactionStatus('Please select an address', true);
+            if (!student || !amount || amount <= 0 || !reason) {
+                showTransactionStatus('Please fill all fields correctly', true);
                 return;
             }
             
             try {
-                showTransactionStatus('Initiating role change transaction... please confirm in MetaMask');
-                console.log(`Setting ${role} role to ${status ? 'enabled' : 'disabled'} for ${address}`);
+                showTransactionStatus('Initiating slashing transaction... please confirm in MetaMask');
+                console.log(`Slashing ${amount} CC from ${student} for reason: ${reason}`);
                 
-                let result;
-                if (role === 'organizer') {
-                    result = await sendEnhancedTransaction(
-                        campusCoinContract,
-                        'setOrganizer',
-                        [address, status],
-                        userAccount
-                    );
-                } else if (role === 'canteen') {
-                    result = await sendEnhancedTransaction(
-                        campusCoinContract,
-                        'setCanteenStaff',
-                        [address, status],
-                        userAccount
-                    );
-                }
+                // Use enhanced transaction handling
+                const result = await sendEnhancedTransaction(
+                    campusCoinContract,
+                    'slashTokens',
+                    [student, amount, reason],
+                    userAccount
+                );
                 
                 if (result.success) {
-                    showTransactionStatus(`Successfully ${status ? 'enabled' : 'disabled'} ${role} role for ${address}`);
+                    showTransactionStatus(`Successfully slashed ${amount} CC from ${student} for: ${reason}`);
+                    // Add to activity log
+                    addActivity('Slash', `Slashed ${amount} CC from ${student} - Reason: ${reason}`, result.txHash);
                 } else {
                     showTransactionStatus(`Transaction failed: ${result.message}`, true);
                 }
             } catch (error) {
-                console.error("Set role error:", error);
+                console.error("Slash error:", error);
                 const errorMsg = await decodeTransactionError(error);
                 showTransactionStatus(`Transaction failed: ${errorMsg}`, true);
             }
         });
+
+        // Function to add an activity to the activity log
+        function addActivity(type, description, txHash) {
+            // Get activities from localStorage or initialize empty array
+            const activities = JSON.parse(localStorage.getItem(`activities_${userAccount}`) || '[]');
+            
+            // Add new activity
+            activities.unshift({
+                type: type,
+                description: description,
+                txHash: txHash,
+                timestamp: new Date().toISOString(),
+                role: 'Admin'
+            });
+            
+            // Keep only the last 10 activities
+            const limitedActivities = activities.slice(0, 10);
+            
+            // Save to localStorage
+            localStorage.setItem(`activities_${userAccount}`, JSON.stringify(limitedActivities));
+            
+            // Update UI
+            loadActivityHistory();
+        }
+
+        // Function to load activity history from localStorage
+        function loadActivityHistory() {
+            const activityLog = document.getElementById('activityLog');
+            const noActivities = document.getElementById('noActivities');
+            
+            // Get activities from localStorage
+            const activities = JSON.parse(localStorage.getItem(`activities_${userAccount}`) || '[]');
+            
+            // Clear current content
+            activityLog.innerHTML = '';
+            
+            if (activities.length === 0) {
+                activityLog.appendChild(noActivities);
+                return;
+            }
+            
+            // Create a table for activities
+            const table = document.createElement('table');
+            table.className = 'activity-table';
+            
+            // Add header row
+            const thead = document.createElement('thead');
+            thead.innerHTML = `
+                <tr>
+                    <th>Date</th>
+                    <th>Role</th>
+                    <th>Type</th>
+                    <th>Description</th>
+                </tr>
+            `;
+            table.appendChild(thead);
+            
+            // Add body rows
+            const tbody = document.createElement('tbody');
+            activities.forEach(activity => {
+                const row = document.createElement('tr');
+                
+                // Format date
+                const date = new Date(activity.timestamp);
+                const formattedDate = `${date.toLocaleDateString()} ${date.toLocaleTimeString()}`;
+                
+                row.innerHTML = `
+                    <td>${formattedDate}</td>
+                    <td>${activity.role || 'Admin'}</td>
+                    <td>${activity.type}</td>
+                    <td>${activity.description}</td>
+                `;
+                tbody.appendChild(row);
+            });
+            table.appendChild(tbody);
+            
+            // Add table to activity log
+            activityLog.appendChild(table);
+        }
         
         // Initial setup after page load
         async function setupInitialRoles() {
